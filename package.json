@@ -5,10 +5,11 @@
   "main": "index.js",
   "scripts": {
     "build": "rm -rf dist && rm -rf *.tsbuildinfo && tsc",
-    "demo": "tsx ./demos/cli/prompts.ts"
+    "demo:prompts": "tsx ./demos/cli/prompts.ts",
+    "demo:groups": "tsx ./demos/cli/groups.ts"
   },
   "keywords": [],
-  "author": "fmdm <eeddow@gmail.com",
+  "author": "fmdm <eeddow@gmail.com>",
   "license": "ISC",
   "type": "module",
   "exports": {

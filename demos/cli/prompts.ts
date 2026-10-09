@@ -16,7 +16,7 @@ async function runDemo() {
 			// 1. Initial state
 			status.text = `Task #${id}: Connecting to service...`
 			status.spinColor = chalk.cyanBright
-			cliRunner.status['Active Phase'] = `Task ${id} booting`
+			cliRunner.infos['Active Phase'] = `Task ${id} booting`
 			await new Promise((r) => setTimeout(r, 400 + Math.random() * 600))
 
 			// 2. Processing state with custom prefix and color shift
@@ -66,9 +66,9 @@ async function runDemo() {
 	cliRunner.start(tasks, 4)
 
 	// Populate global status metrics to test the top status bar
-	cliRunner.status['Total Tasks'] = '12'
-	cliRunner.status['Cluster'] = 'Local-Node-01'
-	cliRunner.status['Environment'] = 'Development'
+	cliRunner.infos['Total Tasks'] = '12'
+	cliRunner.infos['Cluster'] = 'Local-Node-01'
+	cliRunner.infos['Environment'] = 'Development'
 
 	// Wait until all workers drain the iterator
 	await cliRunner.finished

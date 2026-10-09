@@ -1,12 +1,14 @@
 import { stripVTControlCharacters } from 'node:util'
 import type { ChalkInstance } from 'chalk'
 import chalk from 'chalk'
-import { IWorkerStatus, IWorkerTask, TasksRunner } from '../runner.js'
+import {
+	AGroupRunner,
+	type ATaskGroup,
+	type IWorkerStatus,
+	type IWorkerTask,
+	TasksRunner,
+} from '../runner.js'
 
-const frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-function frame(advance: number) {
-	return frames[Math.floor(advance / 80) % frames.length]
-}
 export class WorkerStatus implements IWorkerStatus {
 	readonly #startTS: number
 	get advance() {
@@ -21,7 +23,18 @@ export class WorkerStatus implements IWorkerStatus {
 		this.#startTS = Date.now()
 	}
 }
-
+export type TaskGroup = ATaskGroup<WorkerStatus, GroupRunner, WorkerTask>
+export class GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask> {
+	readonly status = new WorkerStatus()
+	constructor(
+		parent: ATaskGroup<WorkerStatus, GroupRunner, WorkerTask>,
+		text?: string,
+		workers?: WorkerTask | Iterable<WorkerTask>
+	) {
+		super(parent, workers)
+		if (text) this.status.text = text
+	}
+}
 type Interval = ReturnType<typeof setInterval>
 export type WorkerTask = IWorkerTask<WorkerStatus>
 
@@ -34,25 +47,29 @@ const cursor = {
 	},
 }
 function clearTerm() {
-	process.stdout.write('\x1b[0J')	// clear terminal on/below current line
+	process.stdout.write('\x1b[0J') // clear terminal on/below current line
 	// line: process.stdout.write('\x1b[2K')
-	if(hookDisplay) {
+	if (hookDisplay) {
 		for (const params of hookDisplay.logging) console.log(...params)
 		hookDisplay.logging = []
 	}
 	cursor.show()
 }
 let interacting: (() => void)[] | undefined
-let hookDisplay: {
-	interval: Interval
-	logging: any[][]
-} | undefined
+let hookDisplay:
+	| {
+			interval: Interval
+			logging: any[][]
+	  }
+	| undefined
+
 class CliRunner extends TasksRunner<WorkerStatus> {
+	frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+	indentation: string = ' '
+	frame(advance: number) {
+		return this.frames[Math.floor(advance / 80) % this.frames.length]
+	}
 	console: boolean = true
-	/**
-	 * `Items: values` displayed before the task list
-	 */
-	status: Record<string, string> = {}
 	#drawConsole() {
 		clearTerm()
 		if (!cliRunner.console || interacting) return
@@ -67,8 +84,9 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 			}
 		}
 		if (cliRunner.header) printLine(cliRunner.header)
-		if (Object.keys(cliRunner.status).length > 0) {
-			const statuses = Object.entries(cliRunner.status).map(([k, v]) => `${k}: ${v}`)
+		if (Object.keys(cliRunner.infos).length > 0) {
+			// TODO: generalize infos string and console.log it as the end
+			const statuses = Object.entries(cliRunner.infos).map(([k, v]) => `${k}: ${v}`)
 			while (statuses.length > 0) {
 				let statusLine = statuses.shift()!
 				while (
@@ -79,22 +97,29 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 				printLine(statusLine)
 			}
 		}
-		for (const worker of this.workers)
-			printLine(
-				`${worker.prefix ? `${worker.prefix} ` : ''}${worker.pause || worker.spinColor(frame(worker.advance))} ${worker.textColor(worker.text || '')}`
-			)
+		const indentedList = (active: Map<WorkerStatus, GroupRunner | undefined>, indent = '') => {
+			for (const [worker, group] of active.entries()) {
+				printLine(
+					`${indent}${worker.prefix ? `${worker.prefix} ` : ''}${worker.pause || worker.spinColor(this.frame(worker.advance))} ${worker.textColor(worker.text || '')}`
+				)
+				if (group) indentedList(group.active, indent + this.indentation)
+			}
+		}
+		indentedList(this.active)
 		if (cliRunner.footer) printLine(cliRunner.footer)
 		cursor.hide()
 		process.stdout.write(`\x1b[${lines}A`)
 	}
 	static get singleton() {
-		return cliRunner || new CliRunner
+		return cliRunner || new CliRunner()
 	}
-	private constructor() { super() }
+	private constructor() {
+		super()
+	}
 	header?: string
 	footer?: string
 	//#region Parent provision
-	protected reportWorkerError(error: any, worker: WorkerTask): void {
+	reportWorkerError(error: any, _worker: WorkerTask): void {
 		cliRunner.log(chalk.red('Error occurred while processing worker'))
 		cliRunner.log(chalk.redBright(error.message || JSON.stringify(error, null, '\t')))
 	}
@@ -106,7 +131,7 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 		if (!hookDisplay) {
 			hookDisplay = {
 				interval: setInterval(() => this.#drawConsole(), 80),
-				logging: []
+				logging: [],
 			}
 		}
 		super.startRun()
@@ -128,7 +153,7 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 		}
 	}
 	async interact<T>(interaction: () => Promise<T>): Promise<T> {
-		if(!hookDisplay) return interaction()
+		if (!hookDisplay) return interaction()
 		const nextInteraction = () => {
 			const next = interacting!.shift()
 			if (next) {
@@ -139,7 +164,7 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 				this.#drawConsole()
 				hookDisplay = {
 					interval: setInterval(() => this.#drawConsole(), 80),
-					logging: []
+					logging: [],
 				}
 			}
 		}
