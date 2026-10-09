@@ -1,0 +1,26 @@
+{
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"outDir": "./dist",
+		"composite": true,
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"declaration": true,
+		"paths": {
+			"ui-taskgraph": [
+				"./src"
+			],
+			"ui-taskgraph/*": [
+				"./src/*",
+				"./src/*/index.ts"
+			]
+		},
+		"rootDir": "./src"
+	},
+	"include": [
+		"src/**/*"
+	]
+}
