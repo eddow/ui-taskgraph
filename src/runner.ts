@@ -1,16 +1,26 @@
-export interface IWorkerStatus {
-	readonly advance: number
+import { type TaskSync, taskSync } from '.'
+
+export abstract class AWorkerStatus {
 	prefix?: string
 	text?: string
-	pause: string | false
+	pause: string | boolean = false
+	#max = 1
+	#progress = NaN
+	progress(value?: number, max?: number) {
+		if (max) this.#max = max
+		if (value !== undefined) this.#progress = Math.min(1, Math.max(0, value / this.#max))
+		return this.#progress
+	}
 }
 
-export type IWorkerTask<Status extends IWorkerStatus = IWorkerStatus> = (
-	status: Status,
-	group: ATaskGroup<Status, AGroupRunner<Status>, IWorkerTask<Status>>
+export type IWorkerTask<Status extends AWorkerStatus = AWorkerStatus> = (
+	_: TaskSync & {
+		status: Status
+		group: ATaskGroup<Status, AGroupRunner<Status>, IWorkerTask<Status>>
+	}
 ) => Promise<void>
 type Pointer<
-	Status extends IWorkerStatus,
+	Status extends AWorkerStatus,
 	GroupRunnerType extends AGroupRunner<Status>,
 	WorkerTask extends IWorkerTask<Status>,
 > = {
@@ -18,7 +28,7 @@ type Pointer<
 	readonly group: ATaskGroup<Status, GroupRunnerType, WorkerTask>
 }
 type PointerGen<
-	Status extends IWorkerStatus,
+	Status extends AWorkerStatus,
 	GroupRunnerType extends AGroupRunner<Status>,
 	WorkerTask extends IWorkerTask<Status>,
 > = {
@@ -26,7 +36,7 @@ type PointerGen<
 }
 
 export abstract class ATaskGroup<
-	Status extends IWorkerStatus,
+	Status extends AWorkerStatus,
 	GroupRunnerType extends AGroupRunner<Status>,
 	WorkerTask extends IWorkerTask<Status>,
 > {
@@ -64,9 +74,10 @@ export abstract class ATaskGroup<
 		if (!this.#resolveRunner) this.startRun()
 		try {
 			this.active.set(status, undefined)
-			await (this.wrapEach
-				? this.wrapEach!(() => worker(status, this), status)
-				: worker(status, this))
+			// TODO: Do not give taskSync.input - give a wrapped version who removes from `active` if promise and shift it back in iterators when done
+			// TODO: check for taskIO deadlocks
+			const arg = Object.assign({ status, group: this }, taskSync())
+			await (this.wrapEach ? this.wrapEach!(() => worker(arg), status) : worker(arg))
 		} catch (x: any) {
 			this.runner.reportWorkerError(x, worker)
 		}
@@ -74,18 +85,18 @@ export abstract class ATaskGroup<
 		if (!this.active.size) this.endRun()
 	}
 }
-function asIterable<Status extends IWorkerStatus, WorkerTask extends IWorkerTask<Status>>(
+function asIterable<Status extends AWorkerStatus, WorkerTask extends IWorkerTask<Status>>(
 	iterable: WorkerTask | Iterable<WorkerTask>,
 	group: ATaskGroup<Status, AGroupRunner<Status>, WorkerTask>
 ): PointerGen<Status, AGroupRunner<Status>, WorkerTask> {
 	if (typeof iterable === 'function') iterable = [iterable]
 	return (function* () {
-			for (const item of iterable) yield { task: item, group }
-		})()[Symbol.iterator]()
+		for (const item of iterable) yield { task: item, group }
+	})()[Symbol.iterator]()
 }
 
 export abstract class AGroupRunner<
-	Status extends IWorkerStatus = IWorkerStatus,
+	Status extends AWorkerStatus = AWorkerStatus,
 	WorkerTask extends IWorkerTask<Status> = IWorkerTask<Status>,
 > extends ATaskGroup<Status, AGroupRunner<Status>, WorkerTask> {
 	readonly runner: TasksRunner<Status>
@@ -118,7 +129,7 @@ export abstract class AGroupRunner<
 }
 
 export abstract class TasksRunner<
-	Status extends IWorkerStatus = IWorkerStatus,
+	Status extends AWorkerStatus = AWorkerStatus,
 	GroupRunner extends AGroupRunner<Status> = AGroupRunner<Status>,
 	WorkerTask extends IWorkerTask<Status> = IWorkerTask<Status>,
 > extends ATaskGroup<Status, GroupRunner, WorkerTask> {

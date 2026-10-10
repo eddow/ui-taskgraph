@@ -12,7 +12,7 @@ async function runDemo() {
 	const tasks: WorkerTask[] = Array.from({ length: 12 }, (_, i) => {
 		const id = i + 1
 
-		const workerFn: WorkerTask = async (status: WorkerStatus) => {
+		const workerFn: WorkerTask = async ({status}) => {
 			// 1. Initial state
 			status.text = `Task #${id}: Connecting to service...`
 			status.spinColor = chalk.cyanBright

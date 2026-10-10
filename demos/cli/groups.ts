@@ -41,15 +41,18 @@ const files: FileNode[] = [
 
 function group(parent: TaskGroup, files: FileNode[]) {
 	for(const node of files) {
-		if('children' in node) {
+		if('children' in node)
 			group(new GroupRunner(parent, node.name), node.children)
-		} else {
-			parent.start(async (status)=> {
+		else
+			parent.start(async ({ status }) => {
 				status.text = `Downloading ${node.name}`
-				await temp(node.size/5)
+				const grain = 100
+				for(let i = 0; i <= grain; i += 1) {
+					status.progress(i / grain)
+					await temp(node.size/5/grain)
+				}
 				cliRunner.log(`✅ ${node.name} downloaded`)
 			})
-		}
 	}
 }
 group(cliRunner, files)

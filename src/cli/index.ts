@@ -4,22 +4,22 @@ import chalk from 'chalk'
 import {
 	AGroupRunner,
 	type ATaskGroup,
-	type IWorkerStatus,
+	AWorkerStatus,
 	type IWorkerTask,
 	TasksRunner,
 } from '../runner.js'
 
-export class WorkerStatus implements IWorkerStatus {
+const blocks = ' ▏▎▍▌▋▊▉'
+const block = '█'
+export class WorkerStatus extends AWorkerStatus {
 	readonly #startTS: number
 	get advance() {
 		return Date.now() - this.#startTS
 	}
-	prefix?: string
-	text?: string
 	spinColor: ChalkInstance = chalk.greenBright
 	textColor: ChalkInstance = chalk.reset
-	pause: string | false = false
 	constructor() {
+		super()
 		this.#startTS = Date.now()
 	}
 }
@@ -62,10 +62,28 @@ let hookDisplay:
 			logging: any[][]
 	  }
 	| undefined
-
+const infoSeparator = '·'
+export function infoLine(infos: Record<string, string>, indent: string = '') {
+	const entries = Object.entries(infos).map(([k, v]) => k.includes('$$') ? k.replace('$$', v) : `${k} ${v}`)
+	const rv: string[] = []
+	while (entries.length > 0) {
+		let statusLine = indent + entries.shift()!
+		while (
+			entries[0] &&
+			statusLine.length + 3 + stripVTControlCharacters(entries[0]).length < process.stdout.columns
+		)
+			statusLine = `${statusLine}${infoSeparator}${entries.shift()}`
+		rv.push(statusLine)
+	}
+	return rv.join('\n');
+}
 class CliRunner extends TasksRunner<WorkerStatus> {
+	// TODO: Standardize where the spin (characters, colors, ...) are set - now half here, half in the worker
 	frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+	pause = '⏸'
 	indentation: string = ' '
+	progressLength: number = 8
+	progressColor = chalk.cyanBright.bgBlackBright
 	frame(advance: number) {
 		return this.frames[Math.floor(advance / 80) % this.frames.length]
 	}
@@ -84,27 +102,36 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 			}
 		}
 		if (cliRunner.header) printLine(cliRunner.header)
-		if (Object.keys(cliRunner.infos).length > 0) {
-			// TODO: generalize infos string and console.log it as the end
-			const statuses = Object.entries(cliRunner.infos).map(([k, v]) => `${k}: ${v}`)
-			while (statuses.length > 0) {
-				let statusLine = statuses.shift()!
-				while (
-					statuses[0] &&
-					statusLine.length + 3 + stripVTControlCharacters(statuses[0]).length < currentWidth
-				)
-					statusLine = `${statusLine} | ${statuses.shift()}`
-				printLine(statusLine)
-			}
+		function printInfos(group: GroupRunner | CliRunner) {
+			if (Object.keys(group.infos).length > 0)
+				printLine(infoLine(group.infos))
 		}
 		const indentedList = (active: Map<WorkerStatus, GroupRunner | undefined>, indent = '') => {
 			for (const [worker, group] of active.entries()) {
+				const prefix = worker.prefix ? `${worker.prefix} ` : ''
+				const spin =
+					(worker.pause === true ? this.pause : worker.pause) ||
+					worker.spinColor(this.frame(worker.advance))
+				let progress = ''
+				const workerProgress = worker.progress()
+				if (!isNaN(workerProgress)) {
+					const p = Math.floor(workerProgress * this.progressLength)
+					const i = Math.floor(workerProgress * this.progressLength * blocks.length) % blocks.length
+					progress =
+						p === this.progressLength
+							? `${block.repeat(p)}`
+							: `${block.repeat(p)}${blocks[i]}${' '.repeat(this.progressLength - p - 1)}`
+				}
 				printLine(
-					`${indent}${worker.prefix ? `${worker.prefix} ` : ''}${worker.pause || worker.spinColor(this.frame(worker.advance))} ${worker.textColor(worker.text || '')}`
+					`${indent}${prefix}${spin}${this.progressColor(progress)} ${worker.textColor(worker.text || '')}`
 				)
-				if (group) indentedList(group.active, indent + this.indentation)
+				if (group) {
+					printInfos(group)
+					indentedList(group.active, indent + this.indentation)
+				}
 			}
 		}
+		printInfos(cliRunner)
 		indentedList(this.active)
 		if (cliRunner.footer) printLine(cliRunner.footer)
 		cursor.hide()
@@ -141,6 +168,7 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 		clearInterval(hookDisplay?.interval)
 		clearTerm()
 		hookDisplay = undefined
+		console.log(infoLine(cliRunner.infos))
 	}
 
 	//#endregion
