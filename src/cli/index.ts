@@ -11,29 +11,28 @@ import {
 
 export { TaskSyncError } from '../task-sync.js'
 
-import { disposable } from 'ui-taskgraph/utils.js'
 import * as generic from '../task-sync.js'
+import { disposable } from '../utils.js'
 export type Semaphore = generic.Semaphore<WorkerStatus>
 export const Semaphore = generic.Semaphore
 export type TaskIO<T> = generic.TaskIO<WorkerStatus, T>
 export const TaskIO = generic.TaskIO
 
-export const frames = {
+export const commonFrames = {
 	standard: '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏',
 	double: ['⠋⠁', '⠉⠉', '⠈⠙', ' ⠹', ' ⠸', ' ⠼', '⠠⠴', '⠤⠤', '⠦⠄', '⠧ ', '⠇ ', '⠏ '],
 	pause: '⏸',
 	wave: ' ▂▃▄▅▆▇█▇▆▅▄▃▂',
-	clock: '🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛',
-	moon: '🌑🌒🌓🌔🌕🌖🌗🌘',
+	clock: [...'🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛'],
+	moon: [...'🌑🌒🌓🌔🌕🌖🌗🌘'],
 }
 
 const blocks = ' ▏▎▍▌▋▊▉'
 const block = '█'
-type FrameSpecs = { chars: string | string[]; duration?: number; color: ChalkInstance }
+export type FrameSpecs = { chars: string | string[]; duration: number; color: ChalkInstance }
 export type VisualConfig = {
 	textColor: ChalkInstance
 	frames: FrameSpecs
-	waitingInput: string
 	liner: (params: {
 		indent: string
 		prefix: string
@@ -45,11 +44,10 @@ export type VisualConfig = {
 const defaultVisualConfig: VisualConfig = {
 	textColor: chalk.reset,
 	frames: {
-		chars: frames.double,
+		chars: commonFrames.double,
 		duration: 80,
 		color: chalk.greenBright,
 	},
-	waitingInput: '📥',
 	liner: ({ indent, prefix, spin, progress, text }) =>
 		`${indent}${prefix}${spin}${progress} ${text}`,
 }
@@ -72,7 +70,10 @@ export class WorkerStatus extends AWorkerStatus {
 		this.#startTS = Date.now()
 		this.visual = Object.create(visualConfig)
 	}
-	waitInput(_promise: Promise<void>): void {}
+	async waitInput(promise: Promise<void>) {
+		using _frame = this.reframe('📥')
+		await promise
+	}
 }
 export type TaskGroup = ATaskGroup<WorkerStatus, WorkerTask, GroupRunner> & { runner: CliRunner }
 export class GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask> {
@@ -158,7 +159,7 @@ class CliRunner extends TasksRunner<WorkerStatus, WorkerTask, GroupRunner> {
 				const v = worker.visual
 				const frames = v.frames
 				const spin = frames.color(
-					!frames.duration
+					!(frames.duration && Number.isFinite(frames.duration))
 						? frames.chars
 						: frames.chars[Math.floor(worker.advance / frames.duration) % frames.chars.length]
 				)

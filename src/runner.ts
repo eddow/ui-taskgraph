@@ -3,8 +3,8 @@ import * as generic from './task-sync.js'
 
 export { TaskSyncError } from './task-sync.js'
 
-export type Semaphore = generic.Semaphore<AWorkerStatus>
-export const Semaphore = generic.Semaphore
+export type Semaphore<WorkerStatus extends AWorkerStatus> = generic.Semaphore<WorkerStatus>
+export const Semaphore = generic.Semaphore<AWorkerStatus>
 export type TaskIO<T> = generic.TaskIO<AWorkerStatus, T>
 export const TaskIO = generic.TaskIO
 
@@ -23,7 +23,7 @@ export abstract class AWorkerStatus {
 	require<T extends RequireParams<typeof this>>(tio: T) {
 		return generic.require(this, tio)
 	}
-	acquire(...semaphores: generic.Semaphore<typeof this>[]) {
+	acquire(...semaphores: Semaphore<AWorkerStatus>[]) {
 		return generic.acquire(this, ...semaphores)
 	}
 	abstract waitInput(promise: Promise<void>): void

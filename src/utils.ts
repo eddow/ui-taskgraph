@@ -7,10 +7,8 @@ export function once(fn: () => void) {
 		}
 	}
 }
-export function disposable<T extends {}>(
-	disposer: () => void,
-	org: T
-): T & { [Symbol.dispose]: () => void }
+export type Disposable<T extends {}> = T & { [Symbol.dispose]: () => void }
+export function disposable<T extends {}>(disposer: () => void, org: T): Disposable<T>
 export function disposable(disposer: () => void): (() => void) & { [Symbol.dispose]: () => void }
 export function disposable(disposer: () => void, org?: any) {
 	disposer = once(disposer)

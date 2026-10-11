@@ -1,4 +1,4 @@
-import { cliRunner, GroupRunner, TaskGroup} from 'ui-taskgraph/cli'
+import { cliRunner, GroupRunner, TaskGroup } from 'ui-taskgraph/cli'
 
 function temp(s: number) {
 	return new Promise((resolve) => setTimeout(resolve, s*1000))
