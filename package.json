@@ -6,16 +6,17 @@
   "scripts": {
     "build": "rm -rf dist && rm -rf *.tsbuildinfo && tsc",
     "demo:prompts": "tsx ./demos/cli/prompts.ts",
-    "demo:groups": "tsx ./demos/cli/groups.ts"
+    "demo:groups": "tsx ./demos/cli/groups.ts",
+    "test": "vitest"
   },
   "keywords": [],
   "author": "fmdm <eeddow@gmail.com>",
   "license": "ISC",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.ts",
-      "default": "./src/index.ts"
+    "./task-sync": {
+      "types": "./dist/task-sync.ts",
+      "default": "./src/task-sync.ts"
     },
     "./cli": {
       "types": "./src/cli/index.ts",
@@ -27,11 +28,11 @@
     "chalk": "^6.0.1"
   },
   "devDependencies": {
+    "@inquirer/prompts": "^7.2.1",
     "@types/node": "^20.0.0",
+    "chalk": "^6.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.0.0",
-    "vitest": "^4.1.11",
-    "@inquirer/prompts": "^7.2.1",
-    "chalk": "^6.0.1"
+    "vitest": "^4.1.11"
   }
 }

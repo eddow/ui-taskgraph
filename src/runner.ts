@@ -1,9 +1,18 @@
-import { type TaskSync, taskSync } from '.'
+import type { RequireParams } from './task-sync.js'
+import * as generic from './task-sync.js'
 
+export { TaskSyncError } from './task-sync.js'
+
+export type Semaphore = generic.Semaphore<AWorkerStatus>
+export const Semaphore = generic.Semaphore
+export type TaskIO<T> = generic.TaskIO<AWorkerStatus, T>
+export const TaskIO = generic.TaskIO
+
+// TODO: detect deadlocks
+// TODO: manage concurrent infinite tasks generator
 export abstract class AWorkerStatus {
 	prefix?: string
 	text?: string
-	pause: string | boolean = false
 	#max = 1
 	#progress = NaN
 	progress(value?: number, max?: number) {
@@ -11,36 +20,61 @@ export abstract class AWorkerStatus {
 		if (value !== undefined) this.#progress = Math.min(1, Math.max(0, value / this.#max))
 		return this.#progress
 	}
+	require<T extends RequireParams<typeof this>>(tio: T) {
+		return generic.require(this, tio)
+	}
+	acquire(...semaphores: generic.Semaphore<typeof this>[]) {
+		return generic.acquire(this, ...semaphores)
+	}
+	abstract waitInput(promise: Promise<void>): void
+	#waitingInput?: () => void
+	get waitingInput() {
+		return !!this.#waitingInput
+	}
+	set waitingInput(value: boolean) {
+		if (value && !this.#waitingInput) {
+			this.waitInput(
+				new Promise((resolve) => {
+					this.#waitingInput = resolve
+				})
+			)
+		} else if (!value && this.#waitingInput) {
+			this.#waitingInput()
+			this.#waitingInput = undefined
+		}
+	}
 }
 
-export type IWorkerTask<Status extends AWorkerStatus = AWorkerStatus> = (
-	_: TaskSync & {
-		status: Status
-		group: ATaskGroup<Status, AGroupRunner<Status>, IWorkerTask<Status>>
-	}
-) => Promise<void>
+export type IWorkerTask<WorkerStatus extends AWorkerStatus = AWorkerStatus> = (_: {
+	status: WorkerStatus
+	group: ATaskGroup<
+		WorkerStatus,
+		IWorkerTask<WorkerStatus>,
+		AGroupRunner<WorkerStatus, IWorkerTask<WorkerStatus>>
+	>
+}) => Promise<void>
 type Pointer<
-	Status extends AWorkerStatus,
-	GroupRunnerType extends AGroupRunner<Status>,
-	WorkerTask extends IWorkerTask<Status>,
+	WorkerStatus extends AWorkerStatus,
+	WorkerTask extends IWorkerTask<WorkerStatus>,
+	GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask>,
 > = {
 	readonly task: WorkerTask
-	readonly group: ATaskGroup<Status, GroupRunnerType, WorkerTask>
+	readonly group: ATaskGroup<WorkerStatus, WorkerTask, GroupRunner>
 }
 type PointerGen<
-	Status extends AWorkerStatus,
-	GroupRunnerType extends AGroupRunner<Status>,
-	WorkerTask extends IWorkerTask<Status>,
+	WorkerStatus extends AWorkerStatus,
+	WorkerTask extends IWorkerTask<WorkerStatus>,
+	GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask>,
 > = {
-	next(): IteratorResult<Pointer<Status, GroupRunnerType, WorkerTask>>
+	next(): IteratorResult<Pointer<WorkerStatus, WorkerTask, GroupRunner>>
 }
 
 export abstract class ATaskGroup<
-	Status extends AWorkerStatus,
-	GroupRunnerType extends AGroupRunner<Status>,
-	WorkerTask extends IWorkerTask<Status>,
+	WorkerStatus extends AWorkerStatus,
+	WorkerTask extends IWorkerTask<WorkerStatus>,
+	GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask>,
 > {
-	abstract readonly runner: TasksRunner<Status>
+	abstract readonly runner: TasksRunner<WorkerStatus, WorkerTask, GroupRunner>
 	infos: Record<string, string> = {}
 	#finished: Promise<void> = Promise.resolve()
 	get finished() {
@@ -49,34 +83,32 @@ export abstract class ATaskGroup<
 	get running() {
 		return !!this.#resolveRunner
 	}
-	readonly active = new Map<Status, GroupRunnerType | undefined>()
+	readonly active = new Map<WorkerStatus, GroupRunner | undefined>()
 	#resolveRunner?: () => void
-	wrapEach?: (task: () => Promise<void>, workerStatus: Status) => Promise<void>
+	wrapEach?: (task: () => Promise<void>, workerStatus: WorkerStatus) => Promise<void>
 	protected startRun() {
-		if (!this.#resolveRunner)
-			this.#finished = new Promise((resolve) => {
-				this.#resolveRunner = () => {
-					this.#resolveRunner = undefined
-					resolve()
-				}
-			})
+		if (this.#resolveRunner) return
+		this.#finished = new Promise((resolve) => {
+			this.#resolveRunner = () => {
+				this.#resolveRunner = undefined
+				resolve()
+			}
+		})
 	}
 	protected endRun() {
-		if (this.#resolveRunner) {
-			this.#resolveRunner!()
-			this.#resolveRunner = undefined
-		}
+		if (!this.#resolveRunner) return
+		this.#resolveRunner!()
+		this.#resolveRunner = undefined
 	}
 	start(workers: WorkerTask | Iterable<WorkerTask>) {
 		register(this.runner, asIterable(workers, this))
 	}
-	async launched(worker: WorkerTask, status: Status) {
+	async launched(worker: WorkerTask, status: WorkerStatus) {
 		if (!this.#resolveRunner) this.startRun()
 		try {
 			this.active.set(status, undefined)
-			// TODO: Do not give taskSync.input - give a wrapped version who removes from `active` if promise and shift it back in iterators when done
-			// TODO: check for taskIO deadlocks
-			const arg = Object.assign({ status, group: this }, taskSync())
+			const arg = { status, group: this }
+			generic.registerTaskSpace(status)
 			await (this.wrapEach ? this.wrapEach!(() => worker(arg), status) : worker(arg))
 		} catch (x: any) {
 			this.runner.reportWorkerError(x, worker)
@@ -85,10 +117,13 @@ export abstract class ATaskGroup<
 		if (!this.active.size) this.endRun()
 	}
 }
-function asIterable<Status extends AWorkerStatus, WorkerTask extends IWorkerTask<Status>>(
+function asIterable<
+	WorkerStatus extends AWorkerStatus,
+	WorkerTask extends IWorkerTask<WorkerStatus>,
+>(
 	iterable: WorkerTask | Iterable<WorkerTask>,
-	group: ATaskGroup<Status, AGroupRunner<Status>, WorkerTask>
-): PointerGen<Status, AGroupRunner<Status>, WorkerTask> {
+	group: ATaskGroup<WorkerStatus, WorkerTask, AGroupRunner<WorkerStatus, WorkerTask>>
+): PointerGen<WorkerStatus, WorkerTask, AGroupRunner<WorkerStatus, WorkerTask>> {
 	if (typeof iterable === 'function') iterable = [iterable]
 	return (function* () {
 		for (const item of iterable) yield { task: item, group }
@@ -96,24 +131,24 @@ function asIterable<Status extends AWorkerStatus, WorkerTask extends IWorkerTask
 }
 
 export abstract class AGroupRunner<
-	Status extends AWorkerStatus = AWorkerStatus,
-	WorkerTask extends IWorkerTask<Status> = IWorkerTask<Status>,
-> extends ATaskGroup<Status, AGroupRunner<Status>, WorkerTask> {
-	readonly runner: TasksRunner<Status>
+	WorkerStatus extends AWorkerStatus,
+	WorkerTask extends IWorkerTask<WorkerStatus>,
+> extends ATaskGroup<WorkerStatus, WorkerTask, AGroupRunner<WorkerStatus, WorkerTask>> {
+	readonly runner: TasksRunner<WorkerStatus, WorkerTask, AGroupRunner<WorkerStatus, WorkerTask>>
 	constructor(
-		readonly parent: ATaskGroup<Status, AGroupRunner<Status>, WorkerTask>,
+		readonly parent: ATaskGroup<WorkerStatus, WorkerTask, AGroupRunner<WorkerStatus, WorkerTask>>,
 		workers?: WorkerTask | Iterable<WorkerTask>
 	) {
 		super()
 		this.runner = parent.runner
 		if (workers) this.start(workers)
 	}
-	abstract readonly status: Status
+	abstract readonly status: WorkerStatus
 	#wrappedFinished: Promise<void> = super.finished
 	get finished() {
 		return this.#wrappedFinished
 	}
-	wrapAll?: (task: () => Promise<void>, groupStatus: Status) => Promise<void>
+	wrapAll?: (task: () => Promise<void>, groupStatus: WorkerStatus) => Promise<void>
 	protected startRun() {
 		const started = () => {
 			super.startRun()
@@ -129,18 +164,18 @@ export abstract class AGroupRunner<
 }
 
 export abstract class TasksRunner<
-	Status extends AWorkerStatus = AWorkerStatus,
-	GroupRunner extends AGroupRunner<Status> = AGroupRunner<Status>,
-	WorkerTask extends IWorkerTask<Status> = IWorkerTask<Status>,
-> extends ATaskGroup<Status, GroupRunner, WorkerTask> {
+	WorkerStatus extends AWorkerStatus,
+	WorkerTask extends IWorkerTask<WorkerStatus>,
+	GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask>,
+> extends ATaskGroup<WorkerStatus, WorkerTask, GroupRunner> {
 	get runner() {
 		return this
 	}
 	abstract reportWorkerError(error: any, worker: WorkerTask): void
-	private readonly iterators: PointerGen<Status, GroupRunner, WorkerTask>[] = []
-	protected abstract newStatus(): Status
+	private readonly iterators: PointerGen<WorkerStatus, WorkerTask, GroupRunner>[] = []
+	protected abstract newStatus(): WorkerStatus
 	#concurrent: number = 5
-	readonly workers = new Map<Status, ATaskGroup<Status, GroupRunner, WorkerTask>>()
+	readonly workers = new Map<WorkerStatus, ATaskGroup<WorkerStatus, WorkerTask, GroupRunner>>()
 	get concurrent() {
 		;``
 		return this.#concurrent
@@ -151,7 +186,10 @@ export abstract class TasksRunner<
 	}
 
 	private ensureWorkers() {
-		const runWorker = async (pointer: Pointer<Status, GroupRunner, WorkerTask>, status: Status) => {
+		const runWorker = async (
+			pointer: Pointer<WorkerStatus, WorkerTask, GroupRunner>,
+			status: WorkerStatus
+		) => {
 			await pointer.group.launched(pointer.task, status)
 			this.workers.delete(status)
 			this.ensureWorkers()

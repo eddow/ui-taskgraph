@@ -9,29 +9,79 @@ import {
 	TasksRunner,
 } from '../runner.js'
 
+export { TaskSyncError } from '../task-sync.js'
+
+import { disposable } from 'ui-taskgraph/utils.js'
+import * as generic from '../task-sync.js'
+export type Semaphore = generic.Semaphore<WorkerStatus>
+export const Semaphore = generic.Semaphore
+export type TaskIO<T> = generic.TaskIO<WorkerStatus, T>
+export const TaskIO = generic.TaskIO
+
+export const frames = {
+	standard: '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏',
+	double: ['⠋⠁', '⠉⠉', '⠈⠙', ' ⠹', ' ⠸', ' ⠼', '⠠⠴', '⠤⠤', '⠦⠄', '⠧ ', '⠇ ', '⠏ '],
+	pause: '⏸',
+	wave: ' ▂▃▄▅▆▇█▇▆▅▄▃▂',
+	clock: '🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛',
+	moon: '🌑🌒🌓🌔🌕🌖🌗🌘',
+}
+
 const blocks = ' ▏▎▍▌▋▊▉'
 const block = '█'
+type FrameSpecs = { chars: string | string[]; duration?: number; color: ChalkInstance }
+export type VisualConfig = {
+	textColor: ChalkInstance
+	frames: FrameSpecs
+	waitingInput: string
+	liner: (params: {
+		indent: string
+		prefix: string
+		spin: string
+		progress: string
+		text: string
+	}) => string
+}
+const defaultVisualConfig: VisualConfig = {
+	textColor: chalk.reset,
+	frames: {
+		chars: frames.double,
+		duration: 80,
+		color: chalk.greenBright,
+	},
+	waitingInput: '📥',
+	liner: ({ indent, prefix, spin, progress, text }) =>
+		`${indent}${prefix}${spin}${progress} ${text}`,
+}
 export class WorkerStatus extends AWorkerStatus {
 	readonly #startTS: number
 	get advance() {
 		return Date.now() - this.#startTS
 	}
-	spinColor: ChalkInstance = chalk.greenBright
-	textColor: ChalkInstance = chalk.reset
-	constructor() {
+	reframe(fs: Partial<FrameSpecs> | string) {
+		if (typeof fs === 'string') fs = { chars: fs }
+		const oldFs = this.visual.frames
+		this.visual.frames = Object.assign({}, oldFs, fs)
+		return disposable(() => {
+			this.visual.frames = oldFs
+		})
+	}
+	visual: VisualConfig
+	constructor(visualConfig: VisualConfig) {
 		super()
 		this.#startTS = Date.now()
+		this.visual = Object.create(visualConfig)
 	}
+	waitInput(_promise: Promise<void>): void {}
 }
-export type TaskGroup = ATaskGroup<WorkerStatus, GroupRunner, WorkerTask>
+export type TaskGroup = ATaskGroup<WorkerStatus, WorkerTask, GroupRunner> & { runner: CliRunner }
 export class GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask> {
-	readonly status = new WorkerStatus()
-	constructor(
-		parent: ATaskGroup<WorkerStatus, GroupRunner, WorkerTask>,
-		text?: string,
-		workers?: WorkerTask | Iterable<WorkerTask>
-	) {
+	declare runner: CliRunner
+	declare active: Map<WorkerStatus, GroupRunner | undefined>
+	readonly status: WorkerStatus
+	constructor(parent: TaskGroup, text?: string, workers?: WorkerTask | Iterable<WorkerTask>) {
 		super(parent, workers)
+		this.status = new WorkerStatus(parent.runner.visual)
 		if (text) this.status.text = text
 	}
 }
@@ -64,7 +114,9 @@ let hookDisplay:
 	| undefined
 const infoSeparator = '·'
 export function infoLine(infos: Record<string, string>, indent: string = '') {
-	const entries = Object.entries(infos).map(([k, v]) => k.includes('$$') ? k.replace('$$', v) : `${k} ${v}`)
+	const entries = Object.entries(infos).map(([k, v]) =>
+		k.includes('$$') ? k.replace('$$', v) : `${k} ${v}`
+	)
 	const rv: string[] = []
 	while (entries.length > 0) {
 		let statusLine = indent + entries.shift()!
@@ -75,18 +127,14 @@ export function infoLine(infos: Record<string, string>, indent: string = '') {
 			statusLine = `${statusLine}${infoSeparator}${entries.shift()}`
 		rv.push(statusLine)
 	}
-	return rv.join('\n');
+	return rv.join('\n')
 }
-class CliRunner extends TasksRunner<WorkerStatus> {
-	// TODO: Standardize where the spin (characters, colors, ...) are set - now half here, half in the worker
-	frames = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-	pause = '⏸'
+
+class CliRunner extends TasksRunner<WorkerStatus, WorkerTask, GroupRunner> {
+	visual: VisualConfig = Object.create(defaultVisualConfig)
 	indentation: string = ' '
 	progressLength: number = 8
 	progressColor = chalk.cyanBright.bgBlackBright
-	frame(advance: number) {
-		return this.frames[Math.floor(advance / 80) % this.frames.length]
-	}
 	console: boolean = true
 	#drawConsole() {
 		clearTerm()
@@ -103,18 +151,20 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 		}
 		if (cliRunner.header) printLine(cliRunner.header)
 		function printInfos(group: GroupRunner | CliRunner) {
-			if (Object.keys(group.infos).length > 0)
-				printLine(infoLine(group.infos))
+			if (Object.keys(group.infos).length > 0) printLine(infoLine(group.infos))
 		}
 		const indentedList = (active: Map<WorkerStatus, GroupRunner | undefined>, indent = '') => {
 			for (const [worker, group] of active.entries()) {
-				const prefix = worker.prefix ? `${worker.prefix} ` : ''
-				const spin =
-					(worker.pause === true ? this.pause : worker.pause) ||
-					worker.spinColor(this.frame(worker.advance))
+				const v = worker.visual
+				const frames = v.frames
+				const spin = frames.color(
+					!frames.duration
+						? frames.chars
+						: frames.chars[Math.floor(worker.advance / frames.duration) % frames.chars.length]
+				)
 				let progress = ''
 				const workerProgress = worker.progress()
-				if (!isNaN(workerProgress)) {
+				if (!Number.isNaN(workerProgress)) {
 					const p = Math.floor(workerProgress * this.progressLength)
 					const i = Math.floor(workerProgress * this.progressLength * blocks.length) % blocks.length
 					progress =
@@ -123,7 +173,13 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 							: `${block.repeat(p)}${blocks[i]}${' '.repeat(this.progressLength - p - 1)}`
 				}
 				printLine(
-					`${indent}${prefix}${spin}${this.progressColor(progress)} ${worker.textColor(worker.text || '')}`
+					v.liner({
+						indent,
+						prefix: worker.prefix || '',
+						spin,
+						progress: this.progressColor(progress),
+						text: v.textColor(worker.text || ''),
+					})
 				)
 				if (group) {
 					printInfos(group)
@@ -151,7 +207,7 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 		cliRunner.log(chalk.redBright(error.message || JSON.stringify(error, null, '\t')))
 	}
 	protected newStatus(): WorkerStatus {
-		return new WorkerStatus()
+		return new WorkerStatus(this.visual)
 	}
 
 	protected startRun() {
@@ -165,6 +221,7 @@ class CliRunner extends TasksRunner<WorkerStatus> {
 	}
 	protected endRun() {
 		super.endRun()
+		if (!hookDisplay) return
 		clearInterval(hookDisplay?.interval)
 		clearTerm()
 		hookDisplay = undefined

@@ -1,5 +1,5 @@
 import chalk from 'chalk'
-import { cliRunner, type WorkerStatus, type WorkerTask } from 'ui-taskgraph/cli'
+import { cliRunner, type WorkerTask } from 'ui-taskgraph/cli'
 import { select } from '@inquirer/prompts'
 
 // Assuming your TaskMgr classes are above or imported from your module:
@@ -15,25 +15,24 @@ async function runDemo() {
 		const workerFn: WorkerTask = async ({status}) => {
 			// 1. Initial state
 			status.text = `Task #${id}: Connecting to service...`
-			status.spinColor = chalk.cyanBright
+			status.reframe({color: chalk.cyanBright})
 			cliRunner.infos['Active Phase'] = `Task ${id} booting`
 			await new Promise((r) => setTimeout(r, 400 + Math.random() * 600))
 
 			// 2. Processing state with custom prefix and color shift
 			status.text = `Task #${id}: Fetching & parsing payloads`
-			status.spinColor = chalk.yellowBright
+			status.reframe({color: chalk.yellowBright})
 			status.prefix = chalk.gray(`[W-${id}]`)
 			await new Promise((r) => setTimeout(r, 800 + Math.random() * 1000))
 
 			// 3. Conditional: Simulate a temporary pause/waiting state on every 3rd task
 			if (id % 3 === 0) {
-				status.pause = chalk.magenta('⏸')
+				using _pause = status.reframe(chalk.magenta('⏸'))
 				status.text = `Task #${id}: Rate-limited, waiting...`
 				cliRunner.log(
 					chalk.yellow(`⚠ Worker on Task #${id} hit a rate limit, pausing momentarily.`)
 				)
 				await new Promise((r) => setTimeout(r, 1200))
-				status.pause = false // Resume spinning
 			}
 			if (id % 5 === 0) {
 				const tier = await cliRunner.interact(
@@ -50,7 +49,7 @@ async function runDemo() {
 
 			// 4. Finalizing state
 			status.text = `Task #${id}: Writing results to disk`
-			status.spinColor = chalk.blueBright
+			status.reframe({color: chalk.blueBright})
 			await new Promise((r) => setTimeout(r, 500 + Math.random() * 500))
 
 			// 5. Clean completion log using mgr.log
