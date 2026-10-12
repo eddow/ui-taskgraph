@@ -13,12 +13,12 @@ export const TaskIO = generic.TaskIO
 export abstract class AWorkerStatus {
 	prefix?: string
 	text?: string
-	#max = 1
-	#progress = NaN
+	progressMax = 1
+	currentProgress = NaN
 	progress(value?: number, max?: number) {
-		if (max) this.#max = max
-		if (value !== undefined) this.#progress = Math.min(1, Math.max(0, value / this.#max))
-		return this.#progress
+		if (max) this.progressMax = max
+		if (value !== undefined) this.currentProgress = Math.min(1, Math.max(0, value / this.progressMax))
+		return this.currentProgress
 	}
 	require<T extends RequireParams<typeof this>>(tio: T) {
 		return generic.require(this, tio)

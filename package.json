@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "rm -rf dist && rm -rf *.tsbuildinfo && tsc",
+    "build": "rm -rf dist && rm -rf *.tsbuildinfo && tsc && svelte-package --input src/sveltekit --output dist/sveltekit --tsconfig ./src/sveltekit/tsconfig.json && rm -f dist/sveltekit/*.test.js dist/sveltekit/*.test.d.ts dist/sveltekit/tsconfig.json",
     "demo:prompts": "tsx ./demos/cli/prompts.ts",
     "demo:groups": "tsx ./demos/cli/groups.ts",
     "test": "vitest"
@@ -25,16 +25,42 @@
     "./cli": {
       "types": "./dist/cli/index.d.ts",
       "default": "./dist/cli/index.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "default": "./dist/web/index.js"
+    },
+    "./sveltekit/server": {
+      "types": "./dist/sveltekit/server.d.ts",
+      "default": "./dist/sveltekit/server.js"
+    },
+    "./sveltekit/client": {
+      "types": "./dist/sveltekit/client.svelte.d.ts",
+      "default": "./dist/sveltekit/client.svelte.js"
     }
   },
   "peerDependencies": {
     "@inquirer/prompts": "^7.2.1",
-    "chalk": "^6.0.1"
+    "chalk": "^6.0.1",
+    "svelte": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@inquirer/prompts": {
+      "optional": true
+    },
+    "chalk": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@inquirer/prompts": "^7.2.1",
+    "@sveltejs/package": "^2.5.8",
     "@types/node": "^20.0.0",
     "chalk": "^6.0.1",
+    "svelte": "^5.57.2",
     "tsx": "^4.19.2",
     "typescript": "^5.0.0",
     "vitest": "^4.1.11"

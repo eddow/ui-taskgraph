@@ -1,0 +1,17 @@
+{
+	// Editor + packaging config for the runes adapter.
+	// - VS Code only auto-discovers files named `tsconfig.json`, so this
+	//   nested config (not the root one, which excludes this dir from the
+	//   `tsc` emit build) is what the editor uses for these files.
+	// - `"types": ["svelte"]` loads Svelte's ambient rune globals
+	//   (`$state`, ...) — nothing here imports from 'svelte' directly.
+	// - Also used by `svelte-package --tsconfig` (see package.json `build`).
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"composite": false,
+		"declaration": false,
+		"noEmit": true
+	},
+	"include": ["./**/*", "../web/**/*", "../runner.ts", "../task-sync.ts", "../utils.ts"],
+	"exclude": ["../**/*.test.ts"]
+}

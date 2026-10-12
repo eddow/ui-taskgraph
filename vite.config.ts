@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
 	test: {
 		expect: { requireAssertions: true },
+		exclude: ['node_modules', 'dist', '.svelte-kit', 'tmp', 'demos/**/node_modules'],
 		// Browser files in parallel race the SSR module runner at teardown:
 		// after the last file finishes, a pending `fetchModule` fires on a
 		// closed transport (`transport was disconnected`, exit still 0).

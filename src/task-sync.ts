@@ -92,10 +92,20 @@ export interface BaseTask {
 export abstract class ATaskIO<Task extends BaseTask, T> {
 	abstract readonly uid: string
 	abstract readonly unit: TaskIOUnit
+	// Cached resolved value. Only promise resolution populates it — never
+	// `set` (see below). Once present, `require` returns it synchronously.
 	declare readonly value?: T
 	get promise() {
 		return this.unit.query(this.id)
 	}
+	// Provides the value to waiting requirers. Caches locally only to refresh
+	// an already-resolved value (`'value' in this`): the first `set` never
+	// creates the cache — only resolution does. Override to throw for
+	// input-only TaskIOs this side must not fabricate (e.g. a client-input
+	// TaskIO `set` from the backend); values then arrive only through the
+	// legitimate channel (raw `unit.provide`, e.g. `provideInput`). Override
+	// to transform the value (e.g. `{ id }` -> `{ id, info1, ... }`) before
+	// it is provided and — once resolved — considered set.
 	set(value: T) {
 		if('value' in this)
 		Object.defineProperty(this, 'value', { value, writable: false, configurable: true })
