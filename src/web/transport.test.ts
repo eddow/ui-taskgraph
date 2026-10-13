@@ -79,7 +79,10 @@ describe('eventSourceStream', () => {
 				listeners.set(name, [...(listeners.get(name) ?? []), fn])
 			}
 			this.removeEventListener = (name: string, fn: any) => {
-				listeners.set(name, (listeners.get(name) ?? []).filter((f) => f !== fn))
+				listeners.set(
+					name,
+					(listeners.get(name) ?? []).filter((f) => f !== fn)
+				)
 			}
 			instances.push(this)
 		})

@@ -26,11 +26,9 @@ describe('handleRemoteRequest routing', () => {
 
 	it('rejects POST create without task (400)', async () => {
 		const registry = makeRegistry()
-		const res = await handleRemoteRequest(
-			jsonReq('http://x/tasks', 'POST', {}),
-			registry,
-			{ base: '/tasks' }
-		)
+		const res = await handleRemoteRequest(jsonReq('http://x/tasks', 'POST', {}), registry, {
+			base: '/tasks',
+		})
 		expect(res?.status).toBe(400)
 	})
 
@@ -61,9 +59,13 @@ describe('handleRemoteRequest routing', () => {
 	it('serves HEAD snapshot like GET', async () => {
 		const registry = makeRegistry()
 		const runId = registry.create({ task: 'demo' })
-		const res = await handleRemoteRequest(req(`http://x/tasks/${runId}`, { method: 'HEAD' }), registry, {
-			base: '/tasks',
-		})
+		const res = await handleRemoteRequest(
+			req(`http://x/tasks/${runId}`, { method: 'HEAD' }),
+			registry,
+			{
+				base: '/tasks',
+			}
+		)
 		expect(res?.status).toBe(200)
 		registry.dispose(runId)
 	})
@@ -166,7 +168,11 @@ describe('handleRemoteRequest routing', () => {
 	})
 
 	it('rethrows unexpected errors', async () => {
-		const bad = { listTasks: () => { throw new Error('kaboom') } } as any
+		const bad = {
+			listTasks: () => {
+				throw new Error('kaboom')
+			},
+		} as any
 		await expect(handleRemoteRequest(req('http://x/'), bad)).rejects.toThrow('kaboom')
 	})
 
@@ -174,7 +180,11 @@ describe('handleRemoteRequest routing', () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
 		let release!: () => void
 		const gate = new Promise<void>((r) => (release = r))
-		registry.registerTask('gated', () => [async () => { await gate }])
+		registry.registerTask('gated', () => [
+			async () => {
+				await gate
+			},
+		])
 		const runId = registry.create({ task: 'gated' })
 		await tick(30)
 		const total = registry.eventsSince(runId).length
@@ -219,11 +229,10 @@ describe('handleRemoteRequest routing', () => {
 
 	it('SSE on unknown run closes without frames', async () => {
 		const registry = makeRegistry()
-		const res = await handleRemoteRequest(
-			req('http://x/tasks/ghost/events'),
-			registry,
-			{ base: '/tasks', heartbeatMs: 0 }
-		)
+		const res = await handleRemoteRequest(req('http://x/tasks/ghost/events'), registry, {
+			base: '/tasks',
+			heartbeatMs: 0,
+		})
 		expect(res?.headers.get('content-type')).toBe('text/event-stream')
 		const reader = res!.body!.getReader()
 		const { done } = await reader.read()

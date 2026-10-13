@@ -43,7 +43,10 @@ describe('usable', () => {
 	it('begins specs and ends on dispose', () => {
 		const begin = vi.fn()
 		const end = vi.fn()
-		const make = usable((() => ({ begin, end })) as () => { begin(...a: string[]): void; end(): void })
+		const make = usable((() => ({ begin, end })) as () => {
+			begin(...a: string[]): void
+			end(): void
+		})
 		const d = make('a', 'b')
 		expect(begin).toHaveBeenCalledWith('a', 'b')
 		expect(end).not.toHaveBeenCalled()

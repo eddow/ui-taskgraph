@@ -14,7 +14,14 @@ describe('RemoteWorkerStatus/Runner/GroupRunner', () => {
 	it('waitInput awaits the promise', async () => {
 		const s = new RemoteWorkerStatus()
 		let done = false
-		const p = s.waitInput(new Promise<void>((r) => setTimeout(() => { done = true; r() }, 5)))
+		const p = s.waitInput(
+			new Promise<void>((r) =>
+				setTimeout(() => {
+					done = true
+					r()
+				}, 5)
+			)
+		)
 		expect(done).toBe(false)
 		await p
 		expect(done).toBe(true)
@@ -69,9 +76,10 @@ describe('registry task bookkeeping', () => {
 		const seen: unknown[] = []
 		const registry = new RemoteRunnerRegistry({
 			pollMs: 5,
-			newRunner: (hooks) => new RemoteRunner({
-				onError: (e) => seen.push(e),
-			}),
+			newRunner: (_hooks) =>
+				new RemoteRunner({
+					onError: (e) => seen.push(e),
+				}),
 		})
 		registry.registerTask('t', () => [async () => {}])
 		const runId = registry.create({ task: 't' })
@@ -109,18 +117,28 @@ describe('registry run lifecycle', () => {
 
 	it('records worker errors as error events', async () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
-		registry.registerTask('fail', () => [async () => { throw new Error('worker-boom') }])
+		registry.registerTask('fail', () => [
+			async () => {
+				throw new Error('worker-boom')
+			},
+		])
 		const runId = registry.create({ task: 'fail' })
 		await tick(40)
 		const events = registry.eventsSince(runId)
-		expect(events).toContainEqual(expect.objectContaining({ type: 'error', message: 'worker-boom' }))
+		expect(events).toContainEqual(
+			expect.objectContaining({ type: 'error', message: 'worker-boom' })
+		)
 		expect(registry.getSnapshot(runId).errors).toContain('worker-boom')
 		registry.dispose(runId)
 	})
 
 	it('serializes non-Error worker failures', async () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
-		registry.registerTask('failstr', () => [async () => { throw 'plain-string' }])
+		registry.registerTask('failstr', () => [
+			async () => {
+				throw 'plain-string'
+			},
+		])
 		const runId = registry.create({ task: 'failstr' })
 		await tick(40)
 		expect(registry.getSnapshot(runId).errors.length).toBeGreaterThan(0)
@@ -131,7 +149,11 @@ describe('registry run lifecycle', () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
 		let release!: () => void
 		const gate = new Promise<void>((r) => (release = r))
-		registry.registerTask('g', () => [async () => { await gate }])
+		registry.registerTask('g', () => [
+			async () => {
+				await gate
+			},
+		])
 		const runId = registry.create({ task: 'g' })
 		await tick(30)
 		const replayed: number[] = []
@@ -165,12 +187,14 @@ describe('registry run lifecycle', () => {
 
 	it('trims buffered events to maxEvents', async () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 1, ttlMs: 60_000, maxEvents: 3 })
-		registry.registerTask('spin', () => [async ({ status }: any) => {
-			for (let i = 0; i < 10; i++) {
-				status.text = `t${i}`
-				await tick(2)
-			}
-		}])
+		registry.registerTask('spin', () => [
+			async ({ status }: any) => {
+				for (let i = 0; i < 10; i++) {
+					status.text = `t${i}`
+					await tick(2)
+				}
+			},
+		])
 		const runId = registry.create({ task: 'spin' })
 		await tick(80)
 		expect(registry.eventsSince(runId).length).toBeLessThanOrEqual(3)
@@ -200,16 +224,18 @@ describe('registry run lifecycle', () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
 		let release!: () => void
 		const gate = new Promise<void>((r) => (release = r))
-		registry.registerTask('nested', (ctx) => [async ({ status, group }: any) => {
-			status.prefix = 'p0'
-			const sub = new ctx.GroupRunner(group, 'subtask')
-			sub.start(async ({ status: s2 }: any) => {
-				s2.text = 'inner'
-				s2.progress(0.5, 1)
-				await gate
-			})
-			await sub.finished
-		}])
+		registry.registerTask('nested', (ctx) => [
+			async ({ status, group }: any) => {
+				status.prefix = 'p0'
+				const sub = new ctx.GroupRunner(group, 'subtask')
+				sub.start(async ({ status: s2 }: any) => {
+					s2.text = 'inner'
+					s2.progress(0.5, 1)
+					await gate
+				})
+				await sub.finished
+			},
+		])
 		const runId = registry.create({ task: 'nested' })
 		await tick(40)
 		const snap = registry.getSnapshot(runId)
@@ -231,10 +257,12 @@ describe('registry run lifecycle', () => {
 
 	it('run-scoped units isolate TaskIO between runs', async () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
-		registry.registerTask('iso', (ctx) => [async ({ status }: any) => {
-			const tio = new ctx.ClientIO<any, string>('shared-id')
-			status.text = await status.require(tio)
-		}])
+		registry.registerTask('iso', (ctx) => [
+			async ({ status }: any) => {
+				const tio = new ctx.ClientIO<any, string>('shared-id')
+				status.text = await status.require(tio)
+			},
+		])
 		const a = registry.create({ task: 'iso' })
 		const b = registry.create({ task: 'iso' })
 		await tick(30)
@@ -255,12 +283,14 @@ describe('registry run lifecycle', () => {
 
 	it('duplicate query emits input-required once', async () => {
 		const registry = new RemoteRunnerRegistry({ pollMs: 5, ttlMs: 60_000 })
-		registry.registerTask('dupq', (ctx) => [async ({ status }: any) => {
-			const tio = new ctx.ClientIO<any, string>('dup')
-			const p1 = status.require(tio)
-			const p2 = status.require(tio)
-			status.text = `${await p1}/${await p2}`
-		}])
+		registry.registerTask('dupq', (ctx) => [
+			async ({ status }: any) => {
+				const tio = new ctx.ClientIO<any, string>('dup')
+				const p1 = status.require(tio)
+				const p2 = status.require(tio)
+				status.text = `${await p1}/${await p2}`
+			},
+		])
 		const runId = registry.create({ task: 'dupq' })
 		await tick(30)
 		const required = registry.eventsSince(runId).filter((e) => e.type === 'input-required')
@@ -280,13 +310,15 @@ describe('registry run lifecycle', () => {
 		registry.registerTask('sem', (ctx) => {
 			const order: string[] = []
 			;(ctx as any).order = order
-			const mk = (name: string) => async ({ status }: any) => {
-				const sem = new ctx.Semaphore('one')
-				const release = await status.acquire(sem)
-				order.push(name)
-				await tick(5)
-				release()
-			}
+			const mk =
+				(name: string) =>
+				async ({ status }: any) => {
+					const sem = new ctx.Semaphore('one')
+					const release = await status.acquire(sem)
+					order.push(name)
+					await tick(5)
+					release()
+				}
 			return [mk('first'), mk('second')]
 		})
 		const runId = registry.create({ task: 'sem', concurrent: 2 })

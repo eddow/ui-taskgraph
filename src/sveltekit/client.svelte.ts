@@ -5,17 +5,17 @@
 // It wraps the framework-agnostic `RemoteRunnerClient` so every piece of
 // run state is directly usable in markup: no manual `$state` mirroring.
 
-import {
-	eventSourceStream,
-	fetchRequester,
-	RemoteRunnerClient,
-	type EventStream,
-	type RunId,
-	type WorkerSnapshot,
-} from '../web/index.js'
 // Loads Svelte's ambient rune globals (`$state`, ...). Type-only: erased at
 // emit, but required because nothing else here imports from 'svelte'.
 import type {} from 'svelte'
+import {
+	type EventStream,
+	eventSourceStream,
+	fetchRequester,
+	RemoteRunnerClient,
+	type RunId,
+	type WorkerSnapshot,
+} from '../web/index.js'
 
 export type { WorkerSnapshot }
 export { RemoteRunnerClient }

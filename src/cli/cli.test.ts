@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-	cliRunner,
-	commonFrames,
-	GroupRunner,
-	infoLine,
-	WorkerStatus,
-} from './index.js'
+import { cliRunner, commonFrames, GroupRunner, infoLine, WorkerStatus } from './index.js'
 
 describe('commonFrames', () => {
 	it('exposes spinner frame sets', () => {
@@ -71,7 +65,14 @@ describe('WorkerStatus', () => {
 	it('waitInput awaits the promise', async () => {
 		const s = new WorkerStatus(cliRunner.visual)
 		let done = false
-		const p = s.waitInput(new Promise<void>((r) => setTimeout(() => { done = true; r() }, 5)))
+		const p = s.waitInput(
+			new Promise<void>((r) =>
+				setTimeout(() => {
+					done = true
+					r()
+				}, 5)
+			)
+		)
 		expect(done).toBe(false)
 		await p
 		expect(done).toBe(true)
@@ -81,9 +82,11 @@ describe('WorkerStatus', () => {
 describe('GroupRunner', () => {
 	it('creates status with text and inherits runner', async () => {
 		const order: string[] = []
-		cliRunner.start([async () => {
-			order.push('w')
-		}])
+		cliRunner.start([
+			async () => {
+				order.push('w')
+			},
+		])
 		await cliRunner.finished
 		expect(order).toEqual(['w'])
 		const parent = cliRunner as any
@@ -157,8 +160,12 @@ describe('cliRunner', () => {
 		let release!: () => void
 		const gate = new Promise<void>((r) => (release = r))
 		cliRunner.start([
-			async () => { await gate },
-			async () => { await gate },
+			async () => {
+				await gate
+			},
+			async () => {
+				await gate
+			},
 		])
 		await new Promise((r) => setTimeout(r, 30))
 		const p1 = cliRunner.interact(async () => 'first')

@@ -12,6 +12,12 @@
 		"declaration": false,
 		"noEmit": true
 	},
-	"include": ["./**/*", "../web/**/*", "../runner.ts", "../task-sync.ts", "../utils.ts"],
+	"include": [
+		"./**/*",
+		"../web/**/*",
+		"../runner.ts",
+		"../task-sync.ts",
+		"../utils.ts"
+	],
 	"exclude": ["../**/*.test.ts"]
 }

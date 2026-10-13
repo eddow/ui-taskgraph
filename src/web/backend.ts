@@ -9,19 +9,14 @@
 // wire mapping lives in `http.ts`, framework adapters only translate their
 // native request/response objects to standard `Request`/`Response`.
 
-import {
-	AGroupRunner,
-	AWorkerStatus,
-	TasksRunner,
-	type IWorkerTask,
-} from '../runner.js'
+import { AGroupRunner, AWorkerStatus, type IWorkerTask, TasksRunner } from '../runner.js'
 import {
 	GenericSemaphore,
 	GenericTaskIO,
 	localExecutionUnit,
-	TaskSyncError,
 	type SemaphoreUnit,
 	type TaskIOUnit,
+	TaskSyncError,
 } from '../task-sync.js'
 import type {
 	CreateRunRequest,
@@ -244,7 +239,9 @@ export class RemoteRunnerRegistry {
 		}
 		const produced = factory(ctx) as AnyWorkerTask | Iterable<AnyWorkerTask>
 		const workers =
-			typeof produced === 'function' ? [produced as IWorkerTask<any>] : [...(produced as Iterable<IWorkerTask<any>>)]
+			typeof produced === 'function'
+				? [produced as IWorkerTask<any>]
+				: [...(produced as Iterable<IWorkerTask<any>>)]
 		record.runner.start(workers, req.concurrent)
 		this.emitSnapshot(record)
 		record.pollTimer = setInterval(() => this.poll(record), this.pollMs)
@@ -290,7 +287,8 @@ export class RemoteRunnerRegistry {
 	 */
 	provideInput(runId: RunId, req: ProvideInputRequest): void {
 		const record = this.require(runId)
-		if (!record.pendingInputs.has(req.ioId)) throw new UnknownInputError(`Unknown input: ${req.ioId}`)
+		if (!record.pendingInputs.has(req.ioId))
+			throw new UnknownInputError(`Unknown input: ${req.ioId}`)
 		record.inputUnit.resolve(req.ioId, req.value)
 	}
 
@@ -335,7 +333,11 @@ export class RemoteRunnerRegistry {
 
 	private snapshot(record: RunRecord): RunSnapshot {
 		const workers: WorkerSnapshot[] = []
-		const walk = (group: { active: Map<any, any>; infos?: Record<string, string> }, depth: number, groupKey?: string) => {
+		const walk = (
+			group: { active: Map<any, any>; infos?: Record<string, string> },
+			depth: number,
+			groupKey?: string
+		) => {
 			for (const [status, sub] of group.active) {
 				const key = this.keyFor(record, status)
 				const progress = status.progress()
@@ -439,7 +441,10 @@ export class RemoteRunnerRegistry {
 				return new Promise((resolve, reject) => {
 					const timer =
 						this.inputTimeoutMs > 0
-							? setTimeout(() => fail(ioId, new TaskSyncError(`input timed out: ${ioId}`)), this.inputTimeoutMs)
+							? setTimeout(
+									() => fail(ioId, new TaskSyncError(`input timed out: ${ioId}`)),
+									this.inputTimeoutMs
+								)
 							: undefined
 					if (timer) unref(timer)
 					waiters.get(ioId)!.add({ resolve, reject, timer })

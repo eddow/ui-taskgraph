@@ -150,11 +150,9 @@ describe('web http', () => {
 		expect(
 			await handleRemoteRequest(new Request('http://x/other'), registry, { base: '/tasks' })
 		).toBeUndefined()
-		const missing = await handleRemoteRequest(
-			new Request('http://x/tasks/nope'),
-			registry,
-			{ base: '/tasks' }
-		)
+		const missing = await handleRemoteRequest(new Request('http://x/tasks/nope'), registry, {
+			base: '/tasks',
+		})
 		expect(missing?.status).toBe(404)
 	})
 })

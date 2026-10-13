@@ -1,11 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-	AGroupRunner,
-	AWorkerStatus,
-	ATaskGroup,
-	IWorkerTask,
-	TasksRunner,
-} from './runner.js'
+import { AGroupRunner, ATaskGroup, AWorkerStatus, type IWorkerTask, TasksRunner } from './runner.js'
 import * as generic from './task-sync.js'
 
 class TestStatus extends AWorkerStatus {
@@ -144,9 +138,8 @@ describe('AGroupRunner', () => {
 	it('registers itself in parent active and applies wrapAll', async () => {
 		const runner = new TestRunner()
 		const calls: string[] = []
-		let sub: TestGroupRunner | undefined
 		const parent = runner as unknown as ATaskGroup<TestStatus, TestTask, TestGroupRunner>
-		sub = new TestGroupRunner(parent)
+		const sub = new TestGroupRunner(parent)
 		sub.wrapAll = async (task) => {
 			calls.push('wrap-before')
 			await task()
@@ -204,12 +197,16 @@ describe('TasksRunner concurrency', () => {
 	it('drains multiple start() batches in order', async () => {
 		const runner = new TestRunner()
 		const order: number[] = []
-		runner.start([async () => {
-			order.push(1)
-		}])
-		runner.start([async () => {
-			order.push(2)
-		}])
+		runner.start([
+			async () => {
+				order.push(1)
+			},
+		])
+		runner.start([
+			async () => {
+				order.push(2)
+			},
+		])
 		await runner.finished
 		expect(order.sort()).toEqual([1, 2])
 	})

@@ -12,7 +12,12 @@
 // - `POST   {base}/{runId}/input` (`Accept: application/json`) → `{}`
 // - `DELETE {base}/{runId}`       → `{}`
 
-import { RemoteRunnerRegistry, UnknownInputError, UnknownRunError, UnknownTaskError } from './backend.js'
+import {
+	type RemoteRunnerRegistry,
+	UnknownInputError,
+	UnknownRunError,
+	UnknownTaskError,
+} from './backend.js'
 import type { CreateRunRequest, ProvideInputRequest, RunnerEvent } from './shared.js'
 import { formatSseFrame } from './transport.js'
 
@@ -47,8 +52,7 @@ function sseResponse(
 					controller.enqueue(formatSseFrame(event.seq, 'input-required', { ioId: event.ioId }))
 				else if (event.type === 'input-provided')
 					controller.enqueue(formatSseFrame(event.seq, 'input-provided', { ioId: event.ioId }))
-				else if (event.type === 'done')
-					controller.enqueue(formatSseFrame(event.seq, 'done', {}))
+				else if (event.type === 'done') controller.enqueue(formatSseFrame(event.seq, 'done', {}))
 				else controller.enqueue(formatSseFrame(event.seq, 'error', { message: event.message }))
 			}
 			try {

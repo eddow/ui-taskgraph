@@ -20,15 +20,15 @@ export function fetchRequester(fetchImpl: typeof fetch = fetch): Requester {
 		return (await response.text()) as unknown as T
 	}
 	return {
-		get: <T,>(url: string) =>
+		get: <T>(url: string) =>
 			fetchImpl(url, { headers: { Accept: 'application/json' } }).then((r) => handle<T>(r)),
-		post: <T,>(url: string, body?: unknown) =>
+		post: <T>(url: string, body?: unknown) =>
 			fetchImpl(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
 				body: body === undefined ? undefined : JSON.stringify(body),
 			}).then((r) => handle<T>(r)),
-		del: <T,>(url: string) =>
+		del: <T>(url: string) =>
 			fetchImpl(url, { method: 'DELETE', headers: { Accept: 'application/json' } }).then((r) =>
 				handle<T>(r)
 			),
@@ -48,10 +48,7 @@ export interface EventStream {
 }
 
 /** Constructor type for the DOM `EventSource` (or a polyfill). */
-export type EventSourceCtor = new (
-	url: string | URL,
-	init?: EventSourceInit
-) => EventSource
+export type EventSourceCtor = new (url: string | URL, init?: EventSourceInit) => EventSource
 
 /** Event names the web protocol emits (see `shared.ts` `RunnerEvent`). */
 export const RUNNER_EVENT_NAMES = [
@@ -75,9 +72,7 @@ export function eventSourceStream(EventSourceImpl: EventSourceCtor): EventStream
 	return {
 		subscribe(url, onFrame, opts) {
 			const withFrom =
-				opts?.from !== undefined
-					? `${url}${url.includes('?') ? '&' : '?'}from=${opts.from}`
-					: url
+				opts?.from !== undefined ? `${url}${url.includes('?') ? '&' : '?'}from=${opts.from}` : url
 			const source = new EventSourceImpl(withFrom)
 			const handler = (type: string) => (event: MessageEvent) => {
 				onFrame({ id: event.lastEventId || undefined, type, data: event.data })

@@ -107,8 +107,8 @@ export abstract class ATaskIO<Task extends BaseTask, T> {
 	// to transform the value (e.g. `{ id }` -> `{ id, info1, ... }`) before
 	// it is provided and — once resolved — considered set.
 	set(value: T) {
-		if('value' in this)
-		Object.defineProperty(this, 'value', { value, writable: false, configurable: true })
+		if ('value' in this)
+			Object.defineProperty(this, 'value', { value, writable: false, configurable: true })
 		return this.unit.provide(this.id, value)
 	}
 	constructor(readonly id: string) {}

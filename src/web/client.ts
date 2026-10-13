@@ -15,9 +15,10 @@ import type {
 	WorkerSnapshot,
 } from './shared.js'
 import type { EventStream, Requester } from './transport.js'
+
 export { parseSseFrames } from './transport.js'
 
-export type { RunSnapshot, WorkerSnapshot, RunnerEvent }
+export type { RunnerEvent, RunSnapshot, WorkerSnapshot }
 
 export interface RemoteClientOptions {
 	base: string
@@ -183,7 +184,7 @@ export class RemoteRunnerClient {
 		if (snapshot.seq > this.lastSeq) this.lastSeq = snapshot.seq
 		this.errors.length = 0
 		this.errors.push(...snapshot.errors)
-	 // Snapshots are authoritative for pending inputs: an `input-required`
+		// Snapshots are authoritative for pending inputs: an `input-required`
 		// event may predate the snapshot `seq` (skipped by `?from=` resume),
 		// so reconcile instead of only tracking events.
 		this.pendingInputs.clear()

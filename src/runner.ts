@@ -17,7 +17,8 @@ export abstract class AWorkerStatus {
 	currentProgress = NaN
 	progress(value?: number, max?: number) {
 		if (max) this.progressMax = max
-		if (value !== undefined) this.currentProgress = Math.min(1, Math.max(0, value / this.progressMax))
+		if (value !== undefined)
+			this.currentProgress = Math.min(1, Math.max(0, value / this.progressMax))
 		return this.currentProgress
 	}
 	require<T extends RequireParams<typeof this>>(tio: T) {

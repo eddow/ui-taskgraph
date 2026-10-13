@@ -29,9 +29,11 @@ describe('parseRunnerEvent edge cases', () => {
 	})
 
 	it('parses input-provided', () => {
-		expect(
-			parseRunnerEvent('input-provided', JSON.stringify({ ioId: 'a' }), '4')
-		).toEqual({ seq: 4, type: 'input-provided', ioId: 'a' })
+		expect(parseRunnerEvent('input-provided', JSON.stringify({ ioId: 'a' }), '4')).toEqual({
+			seq: 4,
+			type: 'input-provided',
+			ioId: 'a',
+		})
 	})
 
 	it('parses done with empty payload and defaults error message', () => {
