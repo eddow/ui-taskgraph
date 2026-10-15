@@ -2,9 +2,8 @@ import type { RequireParams } from './task-sync.js'
 import * as generic from './task-sync.js'
 import { disposable } from './utils.js'
 
-export { TaskSyncError } from './task-sync.js'
-export { globalUnit } from './task-sync.js'
 export type { LocalExecutionUnit, LocalExecutionUnitOptions } from './task-sync.js'
+export { globalUnit, TaskSyncError } from './task-sync.js'
 
 export type Semaphore<WorkerStatus extends AWorkerStatus> = generic.Semaphore<WorkerStatus>
 export const Semaphore = generic.Semaphore<AWorkerStatus>

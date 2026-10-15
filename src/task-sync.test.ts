@@ -93,7 +93,11 @@ describe('counting semaphores', () => {
 		for (const t of tasks) registerTaskSpace(t)
 		const sems = tasks.map(() => new Sem('pool'))
 
-		const releases = await Promise.all([acquire(tasks[0], sems[0]), acquire(tasks[1], sems[1]), acquire(tasks[2], sems[2])])
+		const releases = await Promise.all([
+			acquire(tasks[0], sems[0]),
+			acquire(tasks[1], sems[1]),
+			acquire(tasks[2], sems[2]),
+		])
 		let fourthAcquired = false
 		const p4 = acquire(tasks[3], sems[3]).then((rel) => {
 			fourthAcquired = true

@@ -13,9 +13,9 @@ import { AGroupRunner, AWorkerStatus, type IWorkerTask, TasksRunner } from '../r
 import {
 	GenericSemaphore,
 	GenericTaskIO,
-	localExecutionUnit,
 	type LocalExecutionUnit,
 	type LocalExecutionUnitOptions,
+	localExecutionUnit,
 	type TaskIOUnit,
 	TaskSyncError,
 } from '../task-sync.js'
