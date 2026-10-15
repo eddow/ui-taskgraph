@@ -10,10 +10,12 @@ export interface WorkerSnapshot {
 	key: string
 	groupKey?: string
 	depth: number
-	prefix?: string
+	state: string
+	icon?: string
 	text?: string
 	progress: number | null
 	progressMax: number
+	/** Derived from `state === 'waiting-input'`. Kept during migration. */
 	waitingInput: boolean
 }
 

@@ -36,9 +36,9 @@ describe('localExecutionUnit', () => {
 		expect(second).toBe(true)
 	})
 
-	it('release without holders is a no-op', () => {
+	it('release without holders throws', () => {
 		const unit = localExecutionUnit()
-		expect(() => unit.release('never-held')).not.toThrow()
+		expect(() => unit.release('never-held')).toThrow(TaskSyncError)
 	})
 
 	it('shares one promise per io id until provided', async () => {

@@ -16,8 +16,70 @@ export type TaskIOUnit = {
 	query(ioId: string): Promise<any> | any
 }
 
-export function localExecutionUnit(): SemaphoreUnit & TaskIOUnit {
-	const acquirements = new Map<string, (() => void)[]>()
+export interface LocalExecutionUnitOptions {
+	/** Max concurrent holders per semaphore id. Unknown ids default to 1. */
+	freeInstances?: Record<string, number>
+}
+
+export interface LocalExecutionUnit extends SemaphoreUnit, TaskIOUnit {
+	/** Mutable capacity per semaphore id. Writes take effect immediately. */
+	readonly freeInstances: Record<string, number>
+}
+
+function validateMax(id: string, max: unknown): asserts max is number {
+	if (!Number.isInteger(max) || (max as number) < 1)
+		throw new TaskSyncError(`Invalid freeInstances for semaphore "${id}": must be an integer >= 1`)
+}
+
+export function localExecutionUnit(opts?: LocalExecutionUnitOptions): LocalExecutionUnit {
+	type semState = {
+		held: number
+		queue: (() => void)[]
+	}
+	const semaphores = new Map<string, semState>()
+	const raw: Record<string, number> = { ...(opts?.freeInstances ?? {}) }
+	for (const [key, max] of Object.entries(raw)) validateMax(key, max)
+	const uid = crypto.randomUUID()
+	const prefix = `${uid}-`
+	const keyOf = (semaphoreId: string) =>
+		semaphoreId.startsWith(prefix) ? semaphoreId.slice(prefix.length) : semaphoreId
+	const getState = (key: string) => {
+		let state = semaphores.get(key)
+		if (!state) {
+			state = { held: 0, queue: [] }
+			semaphores.set(key, state)
+		}
+		return state
+	}
+	const drain = (key: string) => {
+		const state = semaphores.get(key)
+		if (!state) return
+		const max = raw[key] ?? 1
+		while (state.queue.length && state.held < max) {
+			state.held++
+			state.queue.shift()!()
+		}
+		if (!state.queue.length && !state.held) semaphores.delete(key)
+	}
+	const freeInstances = new Proxy(raw, {
+		set(target, prop, value) {
+			if (typeof prop === 'string') {
+				validateMax(prop, value)
+				target[prop] = value
+				drain(prop)
+				return true
+			}
+			return false
+		},
+		deleteProperty(target, prop) {
+			if (typeof prop === 'string') {
+				delete target[prop]
+				drain(prop)
+				return true
+			}
+			return false
+		},
+	})
 	type taskIoPair = {
 		promise: Promise<unknown>
 		resolve(value: unknown): void
@@ -34,16 +96,26 @@ export function localExecutionUnit(): SemaphoreUnit & TaskIOUnit {
 		return taskIOs.get(tioId)!
 	}
 	return {
-		uid: crypto.randomUUID(),
+		uid,
+		freeInstances,
 		acquire(semaphoreId: string) {
-			if (!acquirements.has(semaphoreId)) {
-				acquirements.set(semaphoreId, [])
-			} else return new Promise<void>((resolve) => acquirements.get(semaphoreId)!.push(resolve))
+			const key = keyOf(semaphoreId)
+			const max = raw[key] ?? 1
+			validateMax(key, max)
+			const state = getState(key)
+			if (!state.queue.length && state.held < max) {
+				state.held++
+				return
+			}
+			return new Promise<void>((resolve) => state.queue.push(resolve))
 		},
 		release(semaphoreId: string) {
-			const waiters = acquirements.get(semaphoreId)
-			if (waiters?.length) waiters.shift()!()
-			else acquirements.delete(semaphoreId)
+			const key = keyOf(semaphoreId)
+			const state = semaphores.get(key)
+			if (!state || state.held <= 0)
+				throw new TaskSyncError(`Semaphore "${key}" released more times than acquired`)
+			state.held--
+			drain(key)
 		},
 		provide(tioId: string, value: any) {
 			getPair(tioId).resolve(value)
@@ -53,7 +125,9 @@ export function localExecutionUnit(): SemaphoreUnit & TaskIOUnit {
 		},
 	}
 }
-const globalUnit = localExecutionUnit()
+// Default unit backing the out-of-the-box `Semaphore`/`TaskIO`.
+// Tune capacities via `globalUnit.freeInstances[id] = n` (e.g. max concurrent serp queries).
+export const globalUnit: LocalExecutionUnit = localExecutionUnit()
 
 //#endregion
 //#region Semaphore
@@ -112,7 +186,7 @@ export abstract class ATaskIO<Task extends BaseTask, T> {
 		return this.unit.provide(this.id, value)
 	}
 	constructor(readonly id: string) {}
-	require(task: Task) {
+	require(task: Task): Promise<T> | T {
 		return require(task, this)
 	}
 }

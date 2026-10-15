@@ -14,7 +14,8 @@ import {
 	GenericSemaphore,
 	GenericTaskIO,
 	localExecutionUnit,
-	type SemaphoreUnit,
+	type LocalExecutionUnit,
+	type LocalExecutionUnitOptions,
 	type TaskIOUnit,
 	TaskSyncError,
 } from '../task-sync.js'
@@ -129,13 +130,19 @@ export interface RegistryOptions {
 	inputTimeoutMs?: number
 	/** Override the runner implementation (default: headless {@link RemoteRunner}). */
 	newRunner?: (hooks: RunnerHooks) => TasksRunner<any, any, any>
+	/**
+	 * Max concurrent holders per semaphore id for the run's local unit
+	 * (e.g. `{ serp: 3 }`). Unknown ids default to 1. Mutable per run via
+	 * `record.localUnit.freeInstances` — see {@link LocalExecutionUnit}.
+	 */
+	freeInstances?: LocalExecutionUnitOptions['freeInstances']
 }
 
 type RunRecord = {
 	runId: RunId
 	task: string
 	runner: TasksRunner<any, any, any>
-	localUnit: SemaphoreUnit & TaskIOUnit
+	localUnit: LocalExecutionUnit
 	inputUnit: TaskIOUnit & {
 		resolve(ioId: string, value: unknown): void
 		rejectAll(error: unknown): void
@@ -172,6 +179,7 @@ export class RemoteRunnerRegistry {
 	readonly ttlMs: number
 	readonly maxEvents: number
 	readonly inputTimeoutMs: number
+	readonly freeInstances: LocalExecutionUnitOptions['freeInstances']
 	private readonly runs = new Map<RunId, RunRecord>()
 	private readonly tasks = new Map<string, TaskFactory>()
 	private readonly newRunner: (hooks: RunnerHooks) => TasksRunner<any, any, any>
@@ -181,6 +189,7 @@ export class RemoteRunnerRegistry {
 		this.ttlMs = opts.ttlMs ?? 5 * 60_000
 		this.maxEvents = opts.maxEvents ?? 500
 		this.inputTimeoutMs = opts.inputTimeoutMs ?? 10 * 60_000
+		this.freeInstances = opts.freeInstances
 		this.newRunner = opts.newRunner ?? ((hooks) => new RemoteRunner(hooks))
 	}
 
@@ -206,7 +215,7 @@ export class RemoteRunnerRegistry {
 			runId,
 			task: req.task,
 			runner: undefined as unknown as TasksRunner<any, any, any>,
-			localUnit: localExecutionUnit(),
+			localUnit: localExecutionUnit({ freeInstances: this.freeInstances }),
 			inputUnit: undefined as unknown as RunRecord['inputUnit'],
 			pendingInputs: new Set<string>(),
 			events: [],
@@ -345,7 +354,8 @@ export class RemoteRunnerRegistry {
 					key,
 					groupKey,
 					depth,
-					prefix: status.prefix,
+					state: status.state ?? 'active',
+					icon: status.icon,
 					text: status.text,
 					progress: Number.isNaN(progress) ? null : progress,
 					progressMax: status.progressMax ?? 1,

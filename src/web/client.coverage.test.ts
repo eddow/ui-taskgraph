@@ -84,7 +84,16 @@ describe('applyEvent', () => {
 				errors: [],
 				pendingInputs: [],
 				seq: 2,
-				workers: [{ key: 'n', depth: 0, progress: null, progressMax: 1, waitingInput: false }],
+				workers: [
+					{
+						key: 'n',
+						depth: 0,
+						state: 'active',
+						progress: null,
+						progressMax: 1,
+						waitingInput: false,
+					},
+				],
 			},
 		})
 		expect([...m.keys()]).toEqual(['n'])
@@ -173,7 +182,15 @@ describe('RemoteRunnerClient lifecycle guards', () => {
 			infos: { a: 'b' },
 			errors: ['e1'],
 			workers: [
-				{ key: 'w1', depth: 0, progress: 0.5, progressMax: 1, waitingInput: false, text: 'hi' },
+				{
+					key: 'w1',
+					depth: 0,
+					state: 'active',
+					progress: 0.5,
+					progressMax: 1,
+					waitingInput: false,
+					text: 'hi',
+				},
 			],
 			pendingInputs: ['io1'],
 			seq: 3,

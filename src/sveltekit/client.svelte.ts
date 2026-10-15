@@ -20,6 +20,22 @@ import {
 export type { WorkerSnapshot }
 export { RemoteRunnerClient }
 
+/** Client-side copy of the runner state registry (tone → CSS class). */
+export type ClientStateDef = {
+	tone: string
+	icon?: string
+}
+export const clientStates: Record<string, ClientStateDef> = {
+	active: { tone: 'active' },
+	paused: { tone: 'paused', icon: '⏸' },
+	'waiting-input': { tone: 'waiting', icon: '📥' },
+	error: { tone: 'error', icon: '❌' },
+	done: { tone: 'done', icon: '✅' },
+}
+export function resolveClientState(id: string): ClientStateDef {
+	return clientStates[id] ?? clientStates.active!
+}
+
 /** `EventSource` only exists in the browser — SSR gets a stub stream. */
 function browserEventStream(): EventStream {
 	return typeof EventSource === 'undefined'
@@ -41,7 +57,8 @@ export class WorkerStatus {
 	readonly key: string
 	readonly groupKey: string | undefined
 	readonly depth: number
-	prefix = $state<string | undefined>(undefined)
+	state = $state<string>('active')
+	icon = $state<string | undefined>(undefined)
 	text = $state<string | undefined>(undefined)
 	progress = $state<number | null>(null)
 	progressMax = $state(1)
@@ -56,7 +73,8 @@ export class WorkerStatus {
 
 	/** Applies a fresh snapshot in place (preserves object identity). */
 	sync(snapshot: WorkerSnapshot): void {
-		this.prefix = snapshot.prefix
+		this.state = snapshot.state ?? 'active'
+		this.icon = snapshot.icon
 		this.text = snapshot.text
 		this.progress = snapshot.progress
 		this.progressMax = snapshot.progressMax

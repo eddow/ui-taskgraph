@@ -1,7 +1,10 @@
 import type { RequireParams } from './task-sync.js'
 import * as generic from './task-sync.js'
+import { disposable } from './utils.js'
 
 export { TaskSyncError } from './task-sync.js'
+export { globalUnit } from './task-sync.js'
+export type { LocalExecutionUnit, LocalExecutionUnitOptions } from './task-sync.js'
 
 export type Semaphore<WorkerStatus extends AWorkerStatus> = generic.Semaphore<WorkerStatus>
 export const Semaphore = generic.Semaphore<AWorkerStatus>
@@ -10,9 +13,52 @@ export const TaskIO = generic.TaskIO
 
 // TODO: detect deadlocks
 // TODO: manage concurrent infinite tasks generator
+
+//#region Worker state registry (runner-owned, extensible)
+
+export type StateDef = {
+	spinner: string | string[] | null // null = static icon
+	intervalMs: number // animation speed, head-interpreted
+	tone: string // CLI: chalk key; Svelte: CSS class
+	icon?: string // optional static glyph, e.g. '⏸' '📥'
+}
+
+export const defaultStates: Record<string, StateDef> = {
+	active: { spinner: '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏', intervalMs: 80, tone: 'green' },
+	paused: { spinner: null, intervalMs: 0, tone: 'magenta', icon: '⏸' },
+	'waiting-input': { spinner: null, intervalMs: 0, tone: 'cyan', icon: '📥' },
+	error: { spinner: null, intervalMs: 0, tone: 'red', icon: '❌' },
+	done: { spinner: null, intervalMs: 0, tone: 'green-dim', icon: '✅' },
+}
+
+//#endregion
 export abstract class AWorkerStatus {
-	prefix?: string
+	//#region Phase (task-owned, free-form)
+	icon?: string
+	/** @deprecated Use {@link icon}. Kept as an alias during migration. */
+	get prefix(): string | undefined {
+		return this.icon
+	}
+	set prefix(value: string | undefined) {
+		this.icon = value
+	}
 	text?: string
+	//#endregion
+	//#region State (runner-owned)
+	state: string = 'active'
+	#pauseStack: string[] = []
+	pause() {
+		const prev = this.state
+		this.#pauseStack.push(prev)
+		this.state = 'paused'
+		return disposable(() => {
+			const expected = this.#pauseStack.pop()
+			// Restore only if nothing else moved the state meanwhile;
+			// otherwise just drop the stack entry.
+			if (this.state === 'paused' && expected !== undefined) this.state = expected
+		})
+	}
+	//#endregion
 	progressMax = 1
 	currentProgress = NaN
 	progress(value?: number, max?: number) {
@@ -29,11 +75,13 @@ export abstract class AWorkerStatus {
 	}
 	abstract waitInput(promise: Promise<void>): void
 	#waitingInput?: () => void
+	/** Derived: `state === 'waiting-input'`. Kept writable for back-compat. */
 	get waitingInput() {
-		return !!this.#waitingInput
+		return this.state === 'waiting-input' || !!this.#waitingInput
 	}
 	set waitingInput(value: boolean) {
 		if (value && !this.#waitingInput) {
+			if (this.state === 'active') this.state = 'waiting-input'
 			this.waitInput(
 				new Promise((resolve) => {
 					this.#waitingInput = resolve
@@ -42,6 +90,7 @@ export abstract class AWorkerStatus {
 		} else if (!value && this.#waitingInput) {
 			this.#waitingInput()
 			this.#waitingInput = undefined
+			if (this.state === 'waiting-input') this.state = 'active'
 		}
 	}
 }
@@ -106,12 +155,15 @@ export abstract class ATaskGroup<
 	}
 	async launched(worker: WorkerTask, status: WorkerStatus) {
 		if (!this.#resolveRunner) this.startRun()
+		status.state = 'active'
 		try {
 			this.active.set(status, undefined)
 			const arg = { status, group: this }
 			generic.registerTaskSpace(status)
 			await (this.wrapEach ? this.wrapEach!(() => worker(arg), status) : worker(arg))
+			if (status.state === 'active' || status.state === 'paused') status.state = 'done'
 		} catch (x: any) {
+			status.state = 'error'
 			this.runner.reportWorkerError(x, worker)
 		}
 		this.active.delete(status)
@@ -173,6 +225,15 @@ export abstract class TasksRunner<
 		return this
 	}
 	abstract reportWorkerError(error: any, worker: WorkerTask): void
+	//#region Worker state registry (runner-owned, extensible)
+	readonly states: Record<string, StateDef> = { ...defaultStates }
+	registerState(id: string, def: StateDef) {
+		this.states[id] = def
+	}
+	resolveState(id: string): StateDef {
+		return this.states[id] ?? this.states.active!
+	}
+	//#endregion
 	private readonly iterators: PointerGen<WorkerStatus, WorkerTask, GroupRunner>[] = []
 	protected abstract newStatus(): WorkerStatus
 	#concurrent: number = 5

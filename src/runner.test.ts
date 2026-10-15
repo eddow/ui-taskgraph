@@ -42,17 +42,55 @@ describe('AWorkerStatus', () => {
 	it('waitingInput setter drives waitInput promise', async () => {
 		const s = new TestStatus()
 		expect(s.waitingInput).toBe(false)
+		expect(s.state).toBe('active')
 		s.waitingInput = true
 		expect(s.waitingInput).toBe(true)
+		expect(s.state).toBe('waiting-input')
 		expect(s.waited.length).toBe(1)
 		// second true is idempotent
 		s.waitingInput = true
 		expect(s.waited.length).toBe(1)
 		s.waitingInput = false
 		expect(s.waitingInput).toBe(false)
+		expect(s.state).toBe('active')
 		await expect(s.waited[0]).resolves.toBeUndefined()
 		// false when already false is a no-op
 		s.waitingInput = false
+	})
+
+	it('icon/prefix alias each other', () => {
+		const s = new TestStatus()
+		s.prefix = '📡'
+		expect(s.icon).toBe('📡')
+		s.icon = '🧠'
+		expect(s.prefix).toBe('🧠')
+	})
+
+	it('pause() sets and restores state', () => {
+		const s = new TestStatus()
+		const d = s.pause()
+		expect(s.state).toBe('paused')
+		d[Symbol.dispose]()
+		expect(s.state).toBe('active')
+	})
+
+	it('launched() sets active/done/error lifecycle states', async () => {
+		const runner = new TestRunner()
+		let okStatus: TestStatus | undefined
+		let errStatus: TestStatus | undefined
+		runner.start([
+			async ({ status }) => {
+				okStatus = status
+			},
+			async ({ status }) => {
+				errStatus = status
+				throw new Error('x')
+			},
+		])
+		await runner.finished
+		expect(okStatus?.state).toBe('done')
+		expect(errStatus?.state).toBe('error')
+		expect(runner.errors.length).toBe(1)
 	})
 
 	it('require and acquire delegate to the task space', async () => {

@@ -12,7 +12,6 @@ import {
 export { TaskSyncError } from '../task-sync.js'
 
 import * as generic from '../task-sync.js'
-import { disposable } from '../utils.js'
 export type Semaphore = generic.Semaphore<WorkerStatus>
 export const Semaphore = generic.Semaphore
 export type TaskIO<T> = generic.TaskIO<WorkerStatus, T>
@@ -20,11 +19,21 @@ export const TaskIO = generic.TaskIO
 
 export const commonFrames = {
 	standard: '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏',
-	double: ['⠋⠁', '⠉⠉', '⠈⠙', ' ⠹', ' ⠸', ' ⠼', '⠠⠴', '⠤⠤', '⠦⠄', '⠧ ', '⠇ ', '⠏ '],
 	pause: '⏸',
+	double: ['⡇⠀', '⠏⠀', '⠋⠁', '⠉⠉', '⠈⠙', '⠀⠹', '⠀⢸', '⠀⣰', '⢀⣠', '⣀⣀', '⣄⡀', '⣆⠀'],
+	doublePause: '⠰⠆',
 	wave: ' ▂▃▄▅▆▇█▇▆▅▄▃▂',
 	clock: [...'🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛'],
 	moon: [...'🌑🌒🌓🌔🌕🌖🌗🌘'],
+}
+
+/** Maps registry `tone` ids to CLI colors. Custom tones fall back to white. */
+export const toneColors: Record<string, ChalkInstance> = {
+	green: chalk.greenBright,
+	magenta: chalk.magenta,
+	cyan: chalk.cyanBright,
+	red: chalk.redBright,
+	'green-dim': chalk.green.dim,
 }
 
 const blocks = ' ▏▎▍▌▋▊▉'
@@ -56,22 +65,11 @@ export class WorkerStatus extends AWorkerStatus {
 	get advance() {
 		return Date.now() - this.#startTS
 	}
-	reframe(fs: Partial<FrameSpecs> | string) {
-		if (typeof fs === 'string') fs = { chars: fs }
-		const oldFs = this.visual.frames
-		this.visual.frames = Object.assign({}, oldFs, fs)
-		return disposable(() => {
-			this.visual.frames = oldFs
-		})
-	}
-	visual: VisualConfig
-	constructor(visualConfig: VisualConfig) {
+	constructor() {
 		super()
 		this.#startTS = Date.now()
-		this.visual = Object.create(visualConfig)
 	}
 	async waitInput(promise: Promise<void>) {
-		using _frame = this.reframe('📥')
 		await promise
 	}
 }
@@ -82,7 +80,7 @@ export class GroupRunner extends AGroupRunner<WorkerStatus, WorkerTask> {
 	readonly status: WorkerStatus
 	constructor(parent: TaskGroup, text?: string, workers?: WorkerTask | Iterable<WorkerTask>) {
 		super(parent, workers)
-		this.status = new WorkerStatus(parent.runner.visual)
+		this.status = new WorkerStatus()
 		if (text) this.status.text = text
 	}
 }
@@ -156,13 +154,15 @@ class CliRunner extends TasksRunner<WorkerStatus, WorkerTask, GroupRunner> {
 		}
 		const indentedList = (active: Map<WorkerStatus, GroupRunner | undefined>, indent = '') => {
 			for (const [worker, group] of active.entries()) {
-				const v = worker.visual
-				const frames = v.frames
-				const spin = frames.color(
-					!(frames.duration && Number.isFinite(frames.duration))
-						? frames.chars
-						: frames.chars[Math.floor(worker.advance / frames.duration) % frames.chars.length]
-				)
+				const def = this.resolveState(worker.state)
+				const spin = (() => {
+					const glyph = def.icon ?? ''
+					if (!def.spinner) return (toneColors[def.tone] ?? chalk.white)(glyph)
+					const color = toneColors[def.tone] ?? chalk.white
+					if (!(def.intervalMs && Number.isFinite(def.intervalMs))) return color(def.spinner)
+					const frames = def.spinner
+					return color(frames[Math.floor(worker.advance / def.intervalMs) % frames.length])
+				})()
 				let progress = ''
 				const workerProgress = worker.progress()
 				if (!Number.isNaN(workerProgress)) {
@@ -174,12 +174,12 @@ class CliRunner extends TasksRunner<WorkerStatus, WorkerTask, GroupRunner> {
 							: `${block.repeat(p)}${blocks[i]}${' '.repeat(this.progressLength - p - 1)}`
 				}
 				printLine(
-					v.liner({
+					this.visual.liner({
 						indent,
-						prefix: worker.prefix || '',
+						prefix: worker.icon || '',
 						spin,
 						progress: this.progressColor(progress),
-						text: v.textColor(worker.text || ''),
+						text: this.visual.textColor(worker.text || ''),
 					})
 				)
 				if (group) {
@@ -208,7 +208,7 @@ class CliRunner extends TasksRunner<WorkerStatus, WorkerTask, GroupRunner> {
 		cliRunner.log(chalk.redBright(error.message || JSON.stringify(error, null, '\t')))
 	}
 	protected newStatus(): WorkerStatus {
-		return new WorkerStatus(this.visual)
+		return new WorkerStatus()
 	}
 
 	protected startRun() {

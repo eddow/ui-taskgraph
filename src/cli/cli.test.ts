@@ -40,30 +40,43 @@ describe('infoLine', () => {
 })
 
 describe('WorkerStatus', () => {
-	it('tracks elapsed time and visual config', () => {
-		const s = new WorkerStatus(cliRunner.visual)
+	it('tracks elapsed time', () => {
+		const s = new WorkerStatus()
 		expect(s.advance).toBeGreaterThanOrEqual(0)
-		expect(s.visual).toBeDefined()
+		expect(s.state).toBe('active')
 	})
 
-	it('reframe swaps frames and restores on dispose', () => {
-		const s = new WorkerStatus(cliRunner.visual)
-		const before = s.visual.frames
-		const d = s.reframe('X')
-		expect(s.visual.frames.chars).toBe('X')
+	it('pause() sets paused state and restores on dispose', () => {
+		const s = new WorkerStatus()
+		const d = s.pause()
+		expect(s.state).toBe('paused')
 		d[Symbol.dispose]()
-		expect(s.visual.frames).toBe(before)
+		expect(s.state).toBe('active')
 	})
 
-	it('reframe merges partial frame specs', () => {
-		const s = new WorkerStatus(cliRunner.visual)
-		const d = s.reframe({ duration: 5 } as any)
-		expect(s.visual.frames.duration).toBe(5)
-		d[Symbol.dispose]()
+	it('pause() stacks LIFO', () => {
+		const s = new WorkerStatus()
+		const d1 = s.pause()
+		s.state = 'waiting-input'
+		const d2 = s.pause()
+		expect(s.state).toBe('paused')
+		d2[Symbol.dispose]()
+		expect(s.state).toBe('waiting-input')
+		d1[Symbol.dispose]()
+		// d1's restore is dropped: state moved on while paused
+		expect(s.state).toBe('waiting-input')
+	})
+
+	it('prefix aliases icon', () => {
+		const s = new WorkerStatus()
+		s.prefix = '📡'
+		expect(s.icon).toBe('📡')
+		s.icon = '🧠'
+		expect(s.prefix).toBe('🧠')
 	})
 
 	it('waitInput awaits the promise', async () => {
-		const s = new WorkerStatus(cliRunner.visual)
+		const s = new WorkerStatus()
 		let done = false
 		const p = s.waitInput(
 			new Promise<void>((r) =>
@@ -131,7 +144,7 @@ describe('cliRunner', () => {
 		cliRunner.infos = { k: 'v' }
 		cliRunner.start(async ({ status }) => {
 			status.text = 'doing'
-			status.prefix = '>'
+			status.icon = '>'
 			status.progress(0.5, 1)
 			ran = true
 		})
@@ -188,5 +201,34 @@ describe('cliRunner', () => {
 		})
 		await cliRunner.finished
 		expect(process.stdout.write).toHaveBeenCalled()
+	})
+
+	it('holds the default state registry and resolves unknown ids to active', () => {
+		for (const id of ['active', 'paused', 'waiting-input', 'error', 'done'])
+			expect(cliRunner.states[id]).toBeDefined()
+		expect(cliRunner.resolveState('nope')).toBe(cliRunner.states.active)
+	})
+
+	it('registerState adds custom states', () => {
+		cliRunner.registerState('custom', { spinner: null, intervalMs: 0, tone: 'cyan', icon: '★' })
+		expect(cliRunner.resolveState('custom').icon).toBe('★')
+		delete cliRunner.states['custom']
+	})
+
+	it('sets done state on worker success and error state on failure', async () => {
+		let okStatus: WorkerStatus | undefined
+		let errStatus: WorkerStatus | undefined
+		cliRunner.start([
+			async ({ status }) => {
+				okStatus = status
+			},
+			async ({ status }) => {
+				errStatus = status
+				throw new Error('boom')
+			},
+		])
+		await cliRunner.finished
+		expect(okStatus?.state).toBe('done')
+		expect(errStatus?.state).toBe('error')
 	})
 })

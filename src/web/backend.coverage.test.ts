@@ -226,7 +226,7 @@ describe('registry run lifecycle', () => {
 		const gate = new Promise<void>((r) => (release = r))
 		registry.registerTask('nested', (ctx) => [
 			async ({ status, group }: any) => {
-				status.prefix = 'p0'
+				status.icon = 'p0'
 				const sub = new ctx.GroupRunner(group, 'subtask')
 				sub.start(async ({ status: s2 }: any) => {
 					s2.text = 'inner'
@@ -249,7 +249,9 @@ describe('registry run lifecycle', () => {
 		expect(inner.groupKey).toBeDefined()
 		const outer = snap.workers.find((w) => w.depth === 0)!
 		expect(outer.progress).toBeNull()
-		expect(outer.prefix).toBe('p0')
+		expect(outer.icon).toBe('p0')
+		expect(outer.state).toBe('active')
+		expect(inner.state).toBe('active')
 		release()
 		await tick(40)
 		registry.dispose(runId)

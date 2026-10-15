@@ -175,6 +175,7 @@ describe('web client', () => {
 					{
 						key: 'w1',
 						depth: 0,
+						state: 'active',
 						progress: 0.5,
 						progressMax: 1,
 						waitingInput: false,

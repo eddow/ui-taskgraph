@@ -67,7 +67,8 @@
 			{#each run.workers as w (w.key)}
 				<li style="margin-left: {w.depth * 1.5}rem;">
 					<code>{bar(w.progress)}</code>
-					{`${'  '.repeat(w.depth)}${w.prefix ?? ''} ${w.text ?? ''}`}
+					{`${'  '.repeat(w.depth)}${w.icon ?? ''} ${w.text ?? ''}`}
+					{#if w.state !== 'active'}<strong>[{w.state}]</strong>{/if}
 					{#if w.waitingInput}<strong>⌛ waiting input</strong>{/if}
 				</li>
 			{/each}

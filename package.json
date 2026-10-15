@@ -5,37 +5,71 @@
   "main": "index.js",
   "scripts": {
     "build": "rm -rf dist && rm -rf *.tsbuildinfo && tsc && svelte-package --input src/sveltekit --output dist/sveltekit --tsconfig ./src/sveltekit/tsconfig.json && rm -f dist/sveltekit/*.test.js dist/sveltekit/*.test.d.ts dist/sveltekit/tsconfig.json",
-    "demo:prompts": "tsx ./demos/cli/prompts.ts",
-    "demo:groups": "tsx ./demos/cli/groups.ts",
+    "demo:prompts": "tsx --conditions=development ./demos/cli/prompts.ts",
+    "demo:groups": "tsx --conditions=development ./demos/cli/groups.ts",
     "test": "vitest"
   },
   "keywords": [],
   "author": "fmdm <eeddow@gmail.com>",
   "license": "ISC",
   "type": "module",
+  "publishConfig": {
+    "exports": {
+      "./utils": {
+        "types": "./dist/utils.d.ts",
+        "default": "./dist/utils.js"
+      },
+      "./task-sync": {
+        "types": "./dist/task-sync.d.ts",
+        "default": "./dist/task-sync.js"
+      },
+      "./cli": {
+        "types": "./dist/cli/index.d.ts",
+        "default": "./dist/cli/index.js"
+      },
+      "./web": {
+        "types": "./dist/web/index.d.ts",
+        "default": "./dist/web/index.js"
+      },
+      "./sveltekit/server": {
+        "types": "./dist/sveltekit/server.d.ts",
+        "default": "./dist/sveltekit/server.js"
+      },
+      "./sveltekit/client": {
+        "types": "./dist/sveltekit/client.svelte.d.ts",
+        "default": "./dist/sveltekit/client.svelte.js"
+      }
+    }
+  },
   "exports": {
     "./utils": {
       "types": "./dist/utils.d.ts",
+      "development": "./src/utils.ts",
       "default": "./dist/utils.js"
     },
     "./task-sync": {
       "types": "./dist/task-sync.d.ts",
+      "development": "./src/task-sync.ts",
       "default": "./dist/task-sync.js"
     },
     "./cli": {
       "types": "./dist/cli/index.d.ts",
+      "development": "./src/cli/index.ts",
       "default": "./dist/cli/index.js"
     },
     "./web": {
       "types": "./dist/web/index.d.ts",
+      "development": "./src/web/index.ts",
       "default": "./dist/web/index.js"
     },
     "./sveltekit/server": {
       "types": "./dist/sveltekit/server.d.ts",
+      "development": "./src/sveltekit/server.ts",
       "default": "./dist/sveltekit/server.js"
     },
     "./sveltekit/client": {
       "types": "./dist/sveltekit/client.svelte.d.ts",
+      "development": "./src/sveltekit/client.svelte.ts",
       "default": "./dist/sveltekit/client.svelte.js"
     }
   },
